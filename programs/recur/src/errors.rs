@@ -10,4 +10,6 @@ pub enum RecurError {
     NotRecurPuller,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    #[msg("Collect must pull exactly the plan's price for one period")]
+    AmountMismatch,
 }

@@ -57,6 +57,7 @@ pub fn handle_collect(ctx: Context<Collect>, amount: u64, referral_bps: u16) -> 
         RecurError::NotRecurPuller
     );
     require_keys_eq!(accounts.merchant_ata.owner, plan.owner);
+    require_eq!(amount, plan.data.terms.amount, RecurError::AmountMismatch);
 
     pull_into_transit(&ctx, amount)?;
 

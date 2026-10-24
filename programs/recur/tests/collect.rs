@@ -75,3 +75,11 @@ fn fee_uses_minimum_on_small_amounts() {
 fn fee_never_exceeds_amount() {
     assert_eq!(fee_for(50_000, 200, 100_000).unwrap(), 50_000);
 }
+
+#[test]
+fn collect_rejects_partial_amount() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    let result = common::collect(&mut ctx, &sub, PRICE / 2, None);
+    assert!(common::err_is(&result, RecurError::AmountMismatch));
+    assert_eq!(common::balance(&ctx, sub.member_ata), 1_000 * USDC);
+}
