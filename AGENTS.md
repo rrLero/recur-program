@@ -52,6 +52,7 @@ programs/recur/
   tests/common/mod.rs     LiteSVM setup, rail plan + subscription fixtures
   tests/<name>.rs         one file per instruction
   tests/fixtures/         subscriptions.so (rail binary from devnet) + its sha256
+  examples/devnet_collect.rs  live subscribe + collect on devnet (reuses tests/common/ix.rs)
 target/                   build output, gitignored (keypair lives in target/deploy, never committed)
 ```
 
@@ -91,5 +92,5 @@ A failing tool names the rule number. Fix the code, never the rule.
 - **Add an instruction:** `/new-instruction <name>`.
 - **Add an account field:** take bytes from `reserved`, bump the account's `VERSION` constant, handle the old version where the account is read, add a test that reads a version-1 account.
 - **Build / test:** `pnpm turbo run typecheck test --filter=@repo/solana` (builds first). After changing the program, `pnpm turbo run gen:solana` regenerates the client.
-- **Deploy to devnet:** a devnet wallet kept outside the repo (`solana-keygen new -o ~/.config/solana/devnet.json`, funded from faucet.solana.com), then `NO_DNA=1 anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/devnet.json`. The program keypair in `target/deploy/recur-keypair.json` is the upgrade key: keep a copy in a password manager, never in git. Right after `anchor deploy`, the same wallet runs `init_config` and checks `config.admin`: only the upgrade authority can initialise. Before mainnet, the upgrade authority (and with it the right to initialise) moves to Squads.
+- **Deploy to devnet:** a devnet wallet kept outside the repo (`solana-keygen new -o ~/.config/solana/devnet.json`, funded from faucet.solana.com), then `NO_DNA=1 anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/devnet.json`. The program keypair in `target/deploy/recur-keypair.json` is the upgrade key: keep a copy in a password manager, never in git. Right after `anchor deploy`, `cargo run --example devnet_collect -- ~/.config/solana/devnet.json` (from `programs/recur`) runs `init_config` if absent, asserts `config.admin`, creates a test mint, merchant and 1 USDC / 1 h plan, and sends the subscribe bundle; an hour later `... --resume` runs the second `collect` and prints balances. Its member, merchant and mint keys persist in `~/.config/recur-devnet/`. Only the upgrade authority can initialise. Before mainnet, the upgrade authority (and with it the right to initialise) moves to Squads.
 - **Re-pin the rail binary:** `solana program dump -u devnet De1egAFMkMWZSN5rYXRj9CAdheBamobVNubTsi9avR44 programs/recur/tests/fixtures/subscriptions.so`, then `shasum -a 256 subscriptions.so > subscriptions.so.sha256` in that folder, run the tests, and record why in the commit body.
