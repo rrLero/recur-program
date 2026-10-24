@@ -7,7 +7,7 @@ use subscriptions::{
 };
 
 use crate::{
-    rail, split, Config, Membership, Merchant, RecurError, CONFIG_SEED, MEMBERSHIP_SEED,
+    rail, split, Config, Membership, MembershipSource, Merchant, RecurError, CONFIG_SEED, MEMBERSHIP_SEED,
     MERCHANT_SEED, PULLER_SEED, TRANSIT_SEED,
 };
 
@@ -81,6 +81,16 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
     pull_into_transit(&ctx, amount)?;
 
     let subscription = rail::read_subscription(&accounts.subscription)?;
+    require_keys_eq!(
+        subscription.header.delegator,
+        accounts.member_ata.owner,
+        RecurError::Unauthorized
+    );
+    require_keys_eq!(
+        subscription.header.delegatee,
+        accounts.plan.key(),
+        RecurError::Unauthorized
+    );
     let period_end = subscription
         .current_period_start_ts
         .checked_add(rail::period_secs(&subscription.terms)?)
@@ -102,6 +112,7 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
 
     let membership = &mut ctx.accounts.membership;
     membership.paid_until = membership.paid_until.max(period_end);
+    membership.source = MembershipSource::Paid;
     Ok(())
 }
 

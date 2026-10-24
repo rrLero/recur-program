@@ -226,3 +226,15 @@ fn collect_without_membership_fails() {
     assert_untouched(&ctx, &sub, None);
     assert_eq!(common::balance(&ctx, sub.member_ata), 1_000 * USDC);
 }
+
+#[test]
+fn collect_marks_membership_paid() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    let now = common::now(&ctx);
+    common::write_comp(&mut ctx, &sub, now + 60 * DAY);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    let membership = common::fetch_membership(&ctx, &sub);
+    assert_eq!(membership.source, MembershipSource::Paid);
+    assert_eq!(membership.paid_until, now + 60 * DAY);
+    assert_eq!(common::balance(&ctx, sub.transit_ata), 0);
+}

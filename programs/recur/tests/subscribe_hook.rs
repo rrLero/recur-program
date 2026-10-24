@@ -1,7 +1,7 @@
 mod common;
 
 use common::USDC;
-use recur::{Membership, MembershipSource, RecurError, MEMBERSHIP_VERSION};
+use recur::{MembershipSource, RecurError, MEMBERSHIP_VERSION};
 use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 
@@ -91,23 +91,7 @@ fn subscribe_hook_reopens_expired_membership_with_new_referrer() {
 fn subscribe_hook_on_comp_membership_never_shortens_access() {
     let (mut ctx, sub) = common::configured_sub(PRICE, 720);
     let now = common::now(&ctx);
-    common::write_membership(
-        &mut ctx,
-        &Membership {
-            version: MEMBERSHIP_VERSION,
-            bump: 0,
-            member: sub.member.pubkey(),
-            plan: sub.plan,
-            merchant: sub.merchant.pubkey(),
-            paid_until: now + 60 * DAY,
-            source: MembershipSource::Comp,
-            referrer: None,
-            referral_bps: 0,
-            rent_payer: sub.merchant.pubkey(),
-            created_at: now,
-            reserved: [0; 64],
-        },
-    );
+    common::write_comp(&mut ctx, &sub, now + 60 * DAY);
     common::subscribe(&mut ctx, &sub, Some(sub.referrer)).unwrap();
     let membership = common::fetch_membership(&ctx, &sub);
     assert_eq!(membership.paid_until, now + 60 * DAY);
@@ -156,5 +140,24 @@ fn subscribe_hook_fails_when_paused() {
     common::set_paused(&mut ctx);
     let result = common::subscribe_hook(&mut ctx, &sub, None);
     assert!(common::err_is(&result, RecurError::Paused));
+    assert!(common::try_fetch_membership(&ctx, &sub).is_none());
+}
+
+#[test]
+fn subscribe_hook_alone_keeps_comp_source() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    let now = common::now(&ctx);
+    common::write_comp(&mut ctx, &sub, now + 60 * DAY);
+    common::subscribe_hook(&mut ctx, &sub, Some(sub.referrer)).unwrap();
+    let membership = common::fetch_membership(&ctx, &sub);
+    assert_eq!(membership.source, MembershipSource::Comp);
+    assert_eq!(membership.paid_until, now + 60 * DAY);
+}
+
+#[test]
+fn subscribe_hook_rejects_recur_pda_as_referrer() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    let result = common::subscribe_hook(&mut ctx, &sub, Some(common::transit_pda()));
+    assert!(common::err_is(&result, RecurError::SelfReferral));
     assert!(common::try_fetch_membership(&ctx, &sub).is_none());
 }

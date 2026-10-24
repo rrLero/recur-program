@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use subscriptions::{types::PlanStatus, SUBSCRIPTIONS_ID};
 
 use crate::{
-    rail, Config, Membership, MembershipIdentity, MembershipSource, Merchant, RecurError,
+    rail, Config, Membership, MembershipIdentity, Merchant, RecurError,
     CONFIG_SEED, MEMBERSHIP_SEED, MERCHANT_SEED, PULLER_SEED,
 };
 
@@ -48,7 +48,6 @@ pub fn handle_subscribe_hook(ctx: Context<SubscribeHook>, referrer: Option<Pubke
     require_keys_eq!(accounts.merchant.owner, plan.owner);
 
     let member = accounts.member.key();
-    require!(referrer != Some(member), RecurError::SelfReferral);
     require!(
         accounts.membership.can_reopen(now),
         RecurError::AlreadyMember
@@ -66,7 +65,5 @@ pub fn handle_subscribe_hook(ctx: Context<SubscribeHook>, referrer: Option<Pubke
         rent_payer: accounts.payer.key(),
     };
     let membership = &mut ctx.accounts.membership;
-    membership.open(identity, referrer, referral_bps, now);
-    membership.source = MembershipSource::Paid;
-    Ok(())
+    membership.open(identity, referrer, referral_bps, now)
 }

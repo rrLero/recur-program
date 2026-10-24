@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::RecurError;
+
 pub const CONFIG_SEED: &[u8] = b"config";
 pub const CONFIG_VERSION: u8 = 1;
 pub const MAX_BPS: u16 = 10_000;
@@ -81,7 +83,13 @@ impl Membership {
         referrer: Option<Pubkey>,
         referral_bps: u16,
         now: i64,
-    ) {
+    ) -> Result<()> {
+        if let Some(referrer) = referrer {
+            require!(
+                !is_self_referral(&referrer, &identity.member),
+                RecurError::SelfReferral
+            );
+        }
         if self.created_at == 0 {
             self.version = MEMBERSHIP_VERSION;
             self.bump = identity.bump;
@@ -93,5 +101,13 @@ impl Membership {
         }
         self.referrer = referrer;
         self.referral_bps = referral_bps;
+        Ok(())
     }
+}
+
+fn is_self_referral(referrer: &Pubkey, member: &Pubkey) -> bool {
+    referrer == member
+        || [CONFIG_SEED, PULLER_SEED, TRANSIT_SEED]
+            .iter()
+            .any(|seed| *referrer == Pubkey::find_program_address(&[seed], &crate::ID).0)
 }
