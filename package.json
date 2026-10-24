@@ -1,0 +1,10 @@
+{
+  "name": "@repo/solana",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/require-solana-toolchain.mjs && anchor build",
+    "typecheck": "node ../../scripts/require-solana-toolchain.mjs && cargo clippy --all-targets -- -D warnings",
+    "test": "node ../../scripts/require-solana-toolchain.mjs && cargo test"
+  }
+}
