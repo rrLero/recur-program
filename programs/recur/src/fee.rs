@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{RecurError, MAX_BPS};
+use crate::{Config, Merchant, RecurError, MAX_BPS};
 
 pub fn bps_of(amount: u64, bps: u16) -> Result<u64> {
     let share = (amount as u128)
@@ -12,4 +12,38 @@ pub fn bps_of(amount: u64, bps: u16) -> Result<u64> {
 
 pub fn fee_for(amount: u64, fee_bps: u16, min_fee: u64) -> Result<u64> {
     Ok(bps_of(amount, fee_bps)?.max(min_fee).min(amount))
+}
+
+pub fn effective_fee_bps(config: &Config, merchant: &Merchant) -> u16 {
+    merchant.fee_bps_override.unwrap_or(config.fee_bps)
+}
+
+pub struct Split {
+    pub fee: u64,
+    pub referral: u64,
+    pub merchant: u64,
+}
+
+pub fn split(
+    amount: u64,
+    config: &Config,
+    merchant: &Merchant,
+    referral_bps: u16,
+    now: i64,
+) -> Result<Split> {
+    let fee = if now < merchant.fee_free_until {
+        0
+    } else {
+        fee_for(amount, effective_fee_bps(config, merchant), config.min_fee)?
+    };
+    let after_fee = amount.checked_sub(fee).ok_or(RecurError::MathOverflow)?;
+    let referral = bps_of(after_fee, referral_bps)?;
+    let merchant = after_fee
+        .checked_sub(referral)
+        .ok_or(RecurError::MathOverflow)?;
+    Ok(Split {
+        fee,
+        referral,
+        merchant,
+    })
 }

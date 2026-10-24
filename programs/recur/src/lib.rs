@@ -45,4 +45,24 @@ pub mod recur {
     pub fn sweep_transit(ctx: Context<SweepTransit>) -> Result<()> {
         instructions::sweep_transit::handle_sweep_transit(ctx)
     }
+
+    pub fn register_merchant(ctx: Context<RegisterMerchant>, referral_bps: u16) -> Result<()> {
+        instructions::register_merchant::handle_register_merchant(ctx, referral_bps)
+    }
+
+    pub fn update_merchant(ctx: Context<UpdateMerchant>, referral_bps: u16) -> Result<()> {
+        instructions::register_merchant::handle_update_merchant(ctx, referral_bps)
+    }
+
+    pub fn set_merchant_terms(
+        ctx: Context<SetMerchantTerms>,
+        fee_bps_override: Option<u16>,
+        fee_free_until: i64,
+    ) -> Result<()> {
+        instructions::set_merchant_terms::handle_set_merchant_terms(
+            ctx,
+            fee_bps_override,
+            fee_free_until,
+        )
+    }
 }

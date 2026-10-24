@@ -16,6 +16,10 @@ pub fn transit_pda() -> Pubkey {
     Pubkey::find_program_address(&[recur::TRANSIT_SEED], &recur::ID).0
 }
 
+pub fn merchant_pda(owner: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[recur::MERCHANT_SEED, owner.as_ref()], &recur::ID).0
+}
+
 pub fn program_data_pda() -> Pubkey {
     Pubkey::find_program_address(
         &[recur::ID.as_ref()],
@@ -97,6 +101,54 @@ pub fn collect_ix(
         data: recur::instruction::Collect {
             amount,
             referral_bps,
+        }
+        .data(),
+    }
+}
+
+pub fn register_merchant_ix(owner: Pubkey, payer: Pubkey, referral_bps: u16) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: recur::accounts::RegisterMerchant {
+            owner,
+            payer,
+            merchant: merchant_pda(&owner),
+            system_program: solana_sdk_ids::system_program::ID,
+        }
+        .to_account_metas(None),
+        data: recur::instruction::RegisterMerchant { referral_bps }.data(),
+    }
+}
+
+pub fn update_merchant_ix(signer: Pubkey, merchant_owner: Pubkey, referral_bps: u16) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: recur::accounts::UpdateMerchant {
+            owner: signer,
+            merchant: merchant_pda(&merchant_owner),
+        }
+        .to_account_metas(None),
+        data: recur::instruction::UpdateMerchant { referral_bps }.data(),
+    }
+}
+
+pub fn set_merchant_terms_ix(
+    admin: Pubkey,
+    merchant_owner: Pubkey,
+    fee_bps_override: Option<u16>,
+    fee_free_until: i64,
+) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: recur::accounts::SetMerchantTerms {
+            admin,
+            config: config_pda(),
+            merchant: merchant_pda(&merchant_owner),
+        }
+        .to_account_metas(None),
+        data: recur::instruction::SetMerchantTerms {
+            fee_bps_override,
+            fee_free_until,
         }
         .data(),
     }

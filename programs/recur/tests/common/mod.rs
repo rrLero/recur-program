@@ -3,14 +3,14 @@
 use anchor_lang::AccountDeserialize;
 pub mod ix;
 
-pub use ix::{config_pda, puller_pda, transit_pda};
+pub use ix::{config_pda, merchant_pda, puller_pda, transit_pda};
 
 use litesvm::{types::FailedTransactionMetadata, LiteSVM};
 use litesvm_token::{
     get_spl_account, spl_token::state::Account as TokenAccount, CreateAssociatedTokenAccount,
     CreateMint, MintTo,
 };
-use recur::{Config, RecurError};
+use recur::{Config, Merchant, RecurError};
 use sha2::{Digest, Sha256};
 use solana_instruction::{error::InstructionError, Instruction};
 use solana_keypair::Keypair;
@@ -118,6 +118,50 @@ pub fn sweep_transit(
 ) -> TxResult {
     let ix = ix::sweep_transit_ix(signer.pubkey(), transit_ata, treasury_ata);
     send(ctx, ix, &[signer])
+}
+
+pub fn register_merchant(ctx: &mut Ctx, sub: &Sub, referral_bps: u16) -> TxResult {
+    let owner = sub.merchant.insecure_clone();
+    register_merchant_as(ctx, &owner, referral_bps)
+}
+
+pub fn register_merchant_as(ctx: &mut Ctx, owner: &Keypair, referral_bps: u16) -> TxResult {
+    let ix = ix::register_merchant_ix(owner.pubkey(), owner.pubkey(), referral_bps);
+    send(ctx, ix, &[owner])
+}
+
+pub fn update_merchant(
+    ctx: &mut Ctx,
+    signer: &Keypair,
+    merchant_owner: Pubkey,
+    referral_bps: u16,
+) -> TxResult {
+    let ix = ix::update_merchant_ix(signer.pubkey(), merchant_owner, referral_bps);
+    send(ctx, ix, &[signer])
+}
+
+pub fn set_merchant_terms(
+    ctx: &mut Ctx,
+    signer: &Keypair,
+    merchant_owner: Pubkey,
+    fee_bps_override: Option<u16>,
+    fee_free_until: i64,
+) -> TxResult {
+    let ix = ix::set_merchant_terms_ix(
+        signer.pubkey(),
+        merchant_owner,
+        fee_bps_override,
+        fee_free_until,
+    );
+    send(ctx, ix, &[signer])
+}
+
+pub fn fetch_merchant(ctx: &Ctx, owner: Pubkey) -> Merchant {
+    let account = ctx
+        .svm
+        .get_account(&merchant_pda(&owner))
+        .expect("merchant exists");
+    Merchant::try_deserialize(&mut account.data.as_slice()).unwrap()
 }
 
 pub fn funded_keypair(ctx: &mut Ctx) -> Keypair {
@@ -311,6 +355,7 @@ pub fn configured_sub_with_pullers(
         referrer_ata,
         transit_ata,
     };
+    register_merchant(&mut ctx, &sub, 1_000).unwrap();
     (ctx, sub)
 }
 
