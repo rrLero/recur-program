@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
-use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
+use anchor_lang::AccountDeserialize;
+pub mod ix;
+
+pub use ix::{config_pda, puller_pda, transit_pda};
+
 use litesvm::{types::FailedTransactionMetadata, LiteSVM};
 use litesvm_token::{
     get_spl_account, spl_token::state::Account as TokenAccount, CreateAssociatedTokenAccount,
@@ -55,15 +59,16 @@ pub fn setup() -> Ctx {
     load_rail(&mut svm);
     let admin = Keypair::new();
     svm.airdrop(&admin.pubkey(), 10_000_000_000).unwrap();
+    let mut program_data = svm.get_account(&ix::program_data_pda()).unwrap();
+    program_data.data[12] = 1;
+    program_data.data[13..45].copy_from_slice(admin.pubkey().as_ref());
+    svm.set_account(ix::program_data_pda(), program_data)
+        .unwrap();
     Ctx { svm, admin }
 }
 
 pub fn new_address() -> Pubkey {
     Pubkey::new_unique()
-}
-
-pub fn config_pda() -> Pubkey {
-    Pubkey::find_program_address(&[recur::CONFIG_SEED], &recur::ID).0
 }
 
 pub fn send(ctx: &mut Ctx, ix: Instruction, signers: &[&Keypair]) -> TxResult {
@@ -77,23 +82,56 @@ pub fn send(ctx: &mut Ctx, ix: Instruction, signers: &[&Keypair]) -> TxResult {
 }
 
 pub fn init_config(ctx: &mut Ctx, fee_bps: u16, min_fee: u64, treasury: Pubkey) -> TxResult {
-    let ix = Instruction {
-        program_id: recur::ID,
-        accounts: recur::accounts::InitConfig {
-            admin: ctx.admin.pubkey(),
-            config: config_pda(),
-            system_program: solana_sdk_ids::system_program::ID,
-        }
-        .to_account_metas(None),
-        data: recur::instruction::InitConfig {
-            fee_bps,
-            min_fee,
-            treasury,
-        }
-        .data(),
-    };
     let admin = ctx.admin.insecure_clone();
-    send(ctx, ix, &[&admin])
+    init_config_as(ctx, &admin, fee_bps, min_fee, treasury)
+}
+
+pub fn init_config_as(
+    ctx: &mut Ctx,
+    signer: &Keypair,
+    fee_bps: u16,
+    min_fee: u64,
+    treasury: Pubkey,
+) -> TxResult {
+    let ix = ix::init_config_ix(signer.pubkey(), fee_bps, min_fee, treasury);
+    send(ctx, ix, &[signer])
+}
+
+pub fn update_config(
+    ctx: &mut Ctx,
+    signer: &Keypair,
+    admin: Pubkey,
+    fee_bps: u16,
+    min_fee: u64,
+    treasury: Pubkey,
+    paused: bool,
+) -> TxResult {
+    let ix = ix::update_config_ix(signer.pubkey(), admin, fee_bps, min_fee, treasury, paused);
+    send(ctx, ix, &[signer])
+}
+
+pub fn sweep_transit(
+    ctx: &mut Ctx,
+    signer: &Keypair,
+    transit_ata: Pubkey,
+    treasury_ata: Pubkey,
+) -> TxResult {
+    let ix = ix::sweep_transit_ix(signer.pubkey(), transit_ata, treasury_ata);
+    send(ctx, ix, &[signer])
+}
+
+pub fn funded_keypair(ctx: &mut Ctx) -> Keypair {
+    funded(ctx)
+}
+
+pub fn warp(ctx: &mut Ctx, secs: i64) {
+    let mut clock = ctx.svm.get_sysvar::<solana_clock::Clock>();
+    clock.unix_timestamp = clock.unix_timestamp.checked_add(secs).unwrap();
+    ctx.svm.set_sysvar(&clock);
+}
+
+pub fn now(ctx: &Ctx) -> i64 {
+    ctx.svm.get_sysvar::<solana_clock::Clock>().unix_timestamp
 }
 
 pub fn fetch_config(ctx: &Ctx) -> Config {
@@ -121,14 +159,6 @@ pub struct Sub {
     pub treasury_ata: Pubkey,
     pub referrer_ata: Pubkey,
     pub transit_ata: Pubkey,
-}
-
-pub fn puller_pda() -> Pubkey {
-    Pubkey::find_program_address(&[recur::PULLER_SEED], &recur::ID).0
-}
-
-pub fn transit_pda() -> Pubkey {
-    Pubkey::find_program_address(&[recur::TRANSIT_SEED], &recur::ID).0
 }
 
 fn rail_pda(seeds: &[&[u8]]) -> Pubkey {
@@ -286,33 +316,25 @@ pub fn configured_sub_with_pullers(
 
 pub fn collect(ctx: &mut Ctx, sub: &Sub, amount: u64, referral: Option<u16>) -> TxResult {
     let payer = funded(ctx);
-    let ix = Instruction {
-        program_id: recur::ID,
-        accounts: recur::accounts::Collect {
-            caller: payer.pubkey(),
-            config: config_pda(),
-            puller: puller_pda(),
-            transit: transit_pda(),
-            transit_ata: sub.transit_ata,
-            mint: sub.mint,
-            plan: sub.plan,
-            subscription: sub.subscription,
-            subscription_authority: sub.subscription_authority,
-            member_ata: sub.member_ata,
-            merchant_ata: sub.merchant_ata,
-            treasury_ata: sub.treasury_ata,
-            referrer_ata: referral.map(|_| sub.referrer_ata),
-            event_authority: rail_pda(&[b"event_authority"]),
-            rail_program: SUBSCRIPTIONS_ID,
-            token_program: litesvm_token::spl_token::ID,
-        }
-        .to_account_metas(None),
-        data: recur::instruction::Collect {
-            amount,
-            referral_bps: referral.unwrap_or(0),
-        }
-        .data(),
+    let accounts = recur::accounts::Collect {
+        caller: payer.pubkey(),
+        config: config_pda(),
+        puller: puller_pda(),
+        transit: transit_pda(),
+        transit_ata: sub.transit_ata,
+        mint: sub.mint,
+        plan: sub.plan,
+        subscription: sub.subscription,
+        subscription_authority: sub.subscription_authority,
+        member_ata: sub.member_ata,
+        merchant_ata: sub.merchant_ata,
+        treasury_ata: sub.treasury_ata,
+        referrer_ata: referral.map(|_| sub.referrer_ata),
+        event_authority: rail_pda(&[b"event_authority"]),
+        rail_program: SUBSCRIPTIONS_ID,
+        token_program: litesvm_token::spl_token::ID,
     };
+    let ix = ix::collect_ix(accounts, amount, referral.unwrap_or(0));
     send(ctx, ix, &[&payer])
 }
 
@@ -323,13 +345,18 @@ pub fn balance(ctx: &Ctx, token_account: Pubkey) -> u64 {
 }
 
 pub fn set_paused(ctx: &mut Ctx) {
-    let mut account = ctx.svm.get_account(&config_pda()).unwrap();
-    let mut cfg = Config::try_deserialize(&mut account.data.as_slice()).unwrap();
-    cfg.paused = true;
-    let mut data = Vec::new();
-    anchor_lang::AccountSerialize::try_serialize(&cfg, &mut data).unwrap();
-    account.data = data;
-    ctx.svm.set_account(config_pda(), account).unwrap();
+    let cfg = fetch_config(ctx);
+    let admin = ctx.admin.insecure_clone();
+    update_config(
+        ctx,
+        &admin,
+        cfg.admin,
+        cfg.fee_bps,
+        cfg.min_fee,
+        cfg.treasury,
+        true,
+    )
+    .unwrap();
 }
 
 pub fn drain_member(ctx: &mut Ctx, sub: &Sub) {

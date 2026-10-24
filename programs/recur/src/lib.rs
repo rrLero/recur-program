@@ -28,4 +28,21 @@ pub mod recur {
     pub fn collect(ctx: Context<Collect>, amount: u64, referral_bps: u16) -> Result<()> {
         instructions::collect::handle_collect(ctx, amount, referral_bps)
     }
+
+    pub fn update_config(
+        ctx: Context<UpdateConfig>,
+        admin: Pubkey,
+        fee_bps: u16,
+        min_fee: u64,
+        treasury: Pubkey,
+        paused: bool,
+    ) -> Result<()> {
+        instructions::update_config::handle_update_config(
+            ctx, admin, fee_bps, min_fee, treasury, paused,
+        )
+    }
+
+    pub fn sweep_transit(ctx: Context<SweepTransit>) -> Result<()> {
+        instructions::sweep_transit::handle_sweep_transit(ctx)
+    }
 }
