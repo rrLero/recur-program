@@ -31,7 +31,10 @@ fn merchant(fee_bps_override: Option<u16>, fee_free_until: i64) -> Merchant {
 #[test]
 fn split_takes_fee_then_referral_from_the_rest() {
     let s = split(30 * USDC, &config(), &merchant(None, 0), 1_000, 10).unwrap();
-    assert_eq!((s.fee, s.referral, s.merchant), (600_000, 2_940_000, 26_460_000));
+    assert_eq!(
+        (s.fee, s.referral, s.merchant),
+        (600_000, 2_940_000, 26_460_000)
+    );
 }
 
 #[test]

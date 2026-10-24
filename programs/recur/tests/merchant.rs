@@ -68,7 +68,13 @@ fn set_merchant_terms_sets_override_and_window() {
 #[test]
 fn set_merchant_terms_rejects_non_admin() {
     let (mut ctx, sub) = common::configured_sub(30 * common::USDC, 720);
-    let result = common::set_merchant_terms(&mut ctx, &sub.merchant, sub.merchant.pubkey(), Some(0), 9_999);
+    let result = common::set_merchant_terms(
+        &mut ctx,
+        &sub.merchant,
+        sub.merchant.pubkey(),
+        Some(0),
+        9_999,
+    );
     assert!(common::err_is(&result, RecurError::Unauthorized));
     let merchant = common::fetch_merchant(&ctx, sub.merchant.pubkey());
     assert_eq!(merchant.fee_bps_override, None);
@@ -78,6 +84,7 @@ fn set_merchant_terms_rejects_non_admin() {
 fn set_merchant_terms_rejects_override_over_100_percent() {
     let (mut ctx, sub) = common::configured_sub(30 * common::USDC, 720);
     let admin = ctx.admin.insecure_clone();
-    let result = common::set_merchant_terms(&mut ctx, &admin, sub.merchant.pubkey(), Some(10_001), 0);
+    let result =
+        common::set_merchant_terms(&mut ctx, &admin, sub.merchant.pubkey(), Some(10_001), 0);
     assert!(common::err_is(&result, RecurError::FeeTooHigh));
 }

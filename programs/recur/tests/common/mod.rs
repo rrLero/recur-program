@@ -1,16 +1,16 @@
 #![allow(dead_code)]
 
-use anchor_lang::AccountDeserialize;
+use anchor_lang::{AccountDeserialize, AccountSerialize, Space};
 pub mod ix;
 
-pub use ix::{config_pda, merchant_pda, puller_pda, transit_pda};
+pub use ix::{config_pda, membership_pda, merchant_pda, puller_pda, transit_pda};
 
 use litesvm::{types::FailedTransactionMetadata, LiteSVM};
 use litesvm_token::{
     get_spl_account, spl_token::state::Account as TokenAccount, CreateAssociatedTokenAccount,
     CreateMint, MintTo,
 };
-use recur::{Config, Merchant, RecurError};
+use recur::{Config, Membership, Merchant, RecurError};
 use sha2::{Digest, Sha256};
 use solana_instruction::{error::InstructionError, Instruction};
 use solana_keypair::Keypair;
@@ -20,8 +20,8 @@ use solana_transaction::Transaction;
 use solana_transaction_error::TransactionError;
 use subscriptions::{
     instructions::{
-        CreatePlan, CreatePlanInstructionArgs, InitSubscriptionAuthority, Subscribe,
-        SubscribeInstructionArgs,
+        CreatePlan, CreatePlanInstructionArgs, InitSubscriptionAuthority,
+        RevokeSubscriptionAuthority, Subscribe, SubscribeInstructionArgs,
     },
     types::{PlanData, PlanTerms, SubscribeData},
     SubscriptionAuthority, SUBSCRIPTIONS_ID,
@@ -35,6 +35,7 @@ pub struct Ctx {
 }
 
 pub const USDC: u64 = 1_000_000;
+pub const GENESIS_TS: i64 = 1_761_264_000;
 
 fn fixture(name: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(name)
@@ -64,6 +65,9 @@ pub fn setup() -> Ctx {
     program_data.data[13..45].copy_from_slice(admin.pubkey().as_ref());
     svm.set_account(ix::program_data_pda(), program_data)
         .unwrap();
+    let mut clock = svm.get_sysvar::<solana_clock::Clock>();
+    clock.unix_timestamp = GENESIS_TS;
+    svm.set_sysvar(&clock);
     Ctx { svm, admin }
 }
 
@@ -72,8 +76,12 @@ pub fn new_address() -> Pubkey {
 }
 
 pub fn send(ctx: &mut Ctx, ix: Instruction, signers: &[&Keypair]) -> TxResult {
+    send_many(ctx, &[ix], signers)
+}
+
+pub fn send_many(ctx: &mut Ctx, ixs: &[Instruction], signers: &[&Keypair]) -> TxResult {
     let tx = Transaction::new_signed_with_payer(
-        &[ix],
+        ixs,
         Some(&signers[0].pubkey()),
         signers,
         ctx.svm.latest_blockhash(),
@@ -106,7 +114,14 @@ pub fn update_config(
     treasury: Pubkey,
     paused: bool,
 ) -> TxResult {
-    let ix = ix::update_config_ix(signer.pubkey(), new_admin, fee_bps, min_fee, treasury, paused);
+    let ix = ix::update_config_ix(
+        signer.pubkey(),
+        new_admin,
+        fee_bps,
+        min_fee,
+        treasury,
+        paused,
+    );
     send(ctx, ix, &[signer])
 }
 
@@ -184,9 +199,13 @@ pub fn fetch_config(ctx: &Ctx) -> Config {
 }
 
 pub fn err_is(result: &TxResult, expected: RecurError) -> bool {
+    err_at(result, 0, expected)
+}
+
+pub fn err_at(result: &TxResult, index: u8, expected: RecurError) -> bool {
     matches!(
         result,
-        Err(meta) if meta.err == TransactionError::InstructionError(0, InstructionError::Custom(u32::from(expected)))
+        Err(meta) if meta.err == TransactionError::InstructionError(index, InstructionError::Custom(u32::from(expected)))
     )
 }
 
@@ -310,36 +329,7 @@ pub fn configured_sub_with_pullers(
     });
     send(&mut ctx, create_plan, &[&merchant]).unwrap();
 
-    let plan_account =
-        subscriptions::Plan::from_bytes(&ctx.svm.get_account(&plan).unwrap().data).unwrap();
-    let sa_account = SubscriptionAuthority::from_bytes(
-        &ctx.svm.get_account(&subscription_authority).unwrap().data,
-    )
-    .unwrap();
     let subscription = rail_pda(&[b"subscription", plan.as_ref(), member.pubkey().as_ref()]);
-    let subscribe = Subscribe {
-        subscriber: member.pubkey(),
-        merchant: merchant.pubkey(),
-        plan_pda: plan,
-        subscription_pda: subscription,
-        subscription_authority_pda: subscription_authority,
-        system_program: solana_sdk_ids::system_program::ID,
-        event_authority: rail_pda(&[b"event_authority"]),
-        self_program: SUBSCRIPTIONS_ID,
-        payer: None,
-    }
-    .instruction(SubscribeInstructionArgs {
-        subscribe_data: SubscribeData {
-            plan_id,
-            plan_bump: plan_account.bump,
-            expected_mint: mint,
-            expected_amount: price,
-            expected_period_hours: period_hours,
-            expected_created_at: plan_account.data.terms.created_at,
-            expected_subscription_authority_init_id: sa_account.init_id,
-        },
-    });
-    send(&mut ctx, subscribe, &[&member]).unwrap();
 
     let sub = Sub {
         mint,
@@ -359,11 +349,45 @@ pub fn configured_sub_with_pullers(
     (ctx, sub)
 }
 
-pub fn collect(ctx: &mut Ctx, sub: &Sub, amount: u64, referral: Option<u16>) -> TxResult {
-    let payer = funded(ctx);
-    let accounts = recur::accounts::Collect {
-        caller: payer.pubkey(),
+pub fn rail_subscribe_ix(ctx: &Ctx, sub: &Sub) -> Instruction {
+    let plan_account =
+        subscriptions::Plan::from_bytes(&ctx.svm.get_account(&sub.plan).unwrap().data).unwrap();
+    let sa_account = SubscriptionAuthority::from_bytes(
+        &ctx.svm
+            .get_account(&sub.subscription_authority)
+            .unwrap()
+            .data,
+    )
+    .unwrap();
+    Subscribe {
+        subscriber: sub.member.pubkey(),
+        merchant: sub.merchant.pubkey(),
+        plan_pda: sub.plan,
+        subscription_pda: sub.subscription,
+        subscription_authority_pda: sub.subscription_authority,
+        system_program: solana_sdk_ids::system_program::ID,
+        event_authority: rail_pda(&[b"event_authority"]),
+        self_program: SUBSCRIPTIONS_ID,
+        payer: None,
+    }
+    .instruction(SubscribeInstructionArgs {
+        subscribe_data: SubscribeData {
+            plan_id: plan_account.data.plan_id,
+            plan_bump: plan_account.bump,
+            expected_mint: sub.mint,
+            expected_amount: plan_account.data.terms.amount,
+            expected_period_hours: plan_account.data.terms.period_hours,
+            expected_created_at: plan_account.data.terms.created_at,
+            expected_subscription_authority_init_id: sa_account.init_id,
+        },
+    })
+}
+
+pub fn collect_accounts(sub: &Sub, referrer_ata: Option<Pubkey>) -> recur::accounts::Collect {
+    recur::accounts::Collect {
         config: config_pda(),
+        merchant: merchant_pda(&sub.merchant.pubkey()),
+        membership: membership_pda(&sub.plan, &sub.member.pubkey()),
         puller: puller_pda(),
         transit: transit_pda(),
         transit_ata: sub.transit_ata,
@@ -374,13 +398,157 @@ pub fn collect(ctx: &mut Ctx, sub: &Sub, amount: u64, referral: Option<u16>) -> 
         member_ata: sub.member_ata,
         merchant_ata: sub.merchant_ata,
         treasury_ata: sub.treasury_ata,
-        referrer_ata: referral.map(|_| sub.referrer_ata),
+        referrer_ata,
         event_authority: rail_pda(&[b"event_authority"]),
         rail_program: SUBSCRIPTIONS_ID,
         token_program: litesvm_token::spl_token::ID,
-    };
-    let ix = ix::collect_ix(accounts, amount, referral.unwrap_or(0));
+    }
+}
+
+pub fn collect(ctx: &mut Ctx, sub: &Sub, referrer_ata: Option<Pubkey>) -> TxResult {
+    let payer = funded(ctx);
+    let ix = ix::collect_ix(collect_accounts(sub, referrer_ata));
     send(ctx, ix, &[&payer])
+}
+
+pub fn ata_of(mint: &Pubkey, owner: &Pubkey) -> Pubkey {
+    anchor_spl::associated_token::get_associated_token_address(owner, mint)
+}
+
+pub fn subscribe_hook_ix(sub: &Sub, referrer: Option<Pubkey>) -> Instruction {
+    let member = sub.member.pubkey();
+    ix::subscribe_hook_ix(member, member, sub.plan, sub.merchant.pubkey(), referrer)
+}
+
+pub fn subscribe_hook(ctx: &mut Ctx, sub: &Sub, referrer: Option<Pubkey>) -> TxResult {
+    let member = sub.member.insecure_clone();
+    let ix = subscribe_hook_ix(sub, referrer);
+    send(ctx, ix, &[&member])
+}
+
+pub fn renew(ctx: &mut Ctx, sub: &Sub, referrer: Option<Pubkey>) -> TxResult {
+    let member = sub.member.insecure_clone();
+    let ixs = [
+        subscribe_hook_ix(sub, referrer),
+        ix::collect_ix(collect_accounts(
+            sub,
+            referrer.map(|r| ata_of(&sub.mint, &r)),
+        )),
+    ];
+    send_many(ctx, &ixs, &[&member])
+}
+
+pub fn subscribe(ctx: &mut Ctx, sub: &Sub, referrer: Option<Pubkey>) -> TxResult {
+    let member = sub.member.insecure_clone();
+    let ixs = [
+        rail_subscribe_ix(ctx, sub),
+        subscribe_hook_ix(sub, referrer),
+        ix::collect_ix(collect_accounts(
+            sub,
+            referrer.map(|r| ata_of(&sub.mint, &r)),
+        )),
+    ];
+    send_many(ctx, &ixs, &[&member])
+}
+
+pub fn rail_subscribe(ctx: &mut Ctx, sub: &Sub) -> TxResult {
+    let member = sub.member.insecure_clone();
+    let ix = rail_subscribe_ix(ctx, sub);
+    send(ctx, ix, &[&member])
+}
+
+pub fn try_fetch_membership(ctx: &Ctx, sub: &Sub) -> Option<Membership> {
+    let account = ctx
+        .svm
+        .get_account(&membership_pda(&sub.plan, &sub.member.pubkey()))?;
+    Membership::try_deserialize(&mut account.data.as_slice()).ok()
+}
+
+pub fn fetch_membership(ctx: &Ctx, sub: &Sub) -> Membership {
+    try_fetch_membership(ctx, sub).expect("membership exists")
+}
+
+pub fn paid_until(ctx: &Ctx, sub: &Sub) -> Option<i64> {
+    try_fetch_membership(ctx, sub).map(|m| m.paid_until)
+}
+
+pub fn write_membership(ctx: &mut Ctx, membership: &Membership) {
+    let address = membership_pda(&membership.plan, &membership.member);
+    let mut membership = membership.clone();
+    membership.bump = Pubkey::find_program_address(
+        &[
+            recur::MEMBERSHIP_SEED,
+            membership.plan.as_ref(),
+            membership.member.as_ref(),
+        ],
+        &recur::ID,
+    )
+    .1;
+    let mut data = Vec::new();
+    membership.try_serialize(&mut data).unwrap();
+    data.resize(8 + Membership::INIT_SPACE, 0);
+    let lamports = ctx.svm.minimum_balance_for_rent_exemption(data.len());
+    ctx.svm
+        .set_account(
+            address,
+            solana_account::Account {
+                lamports,
+                data,
+                owner: recur::ID,
+                executable: false,
+                rent_epoch: 0,
+            },
+        )
+        .unwrap();
+}
+
+pub fn token_account(ctx: &mut Ctx, sub: &Sub, owner: &Pubkey) -> Pubkey {
+    let mint = sub.mint;
+    ata(ctx, &mint, owner)
+}
+
+pub fn fund_member(ctx: &mut Ctx, sub: &Sub, amount: u64) {
+    let admin = ctx.admin.insecure_clone();
+    MintTo::new(&mut ctx.svm, &admin, &sub.mint, &sub.member_ata, amount)
+        .send()
+        .unwrap();
+}
+
+pub fn set_plan(ctx: &mut Ctx, sub: &Sub, edit: impl FnOnce(&mut subscriptions::Plan)) {
+    let mut account = ctx.svm.get_account(&sub.plan).unwrap();
+    let mut plan = subscriptions::Plan::from_bytes(&account.data).unwrap();
+    edit(&mut plan);
+    let bytes = borsh::to_vec(&plan).unwrap();
+    account.data[..bytes.len()].copy_from_slice(&bytes);
+    ctx.svm.set_account(sub.plan, account).unwrap();
+}
+
+pub fn revoke_delegate(ctx: &mut Ctx, sub: &Sub) -> TxResult {
+    let member = sub.member.insecure_clone();
+    let ix = RevokeSubscriptionAuthority {
+        user: member.pubkey(),
+        user_ata: sub.member_ata,
+        token_mint: sub.mint,
+        token_program: litesvm_token::spl_token::ID,
+        subscription_authority: sub.subscription_authority,
+        receiver: None,
+    }
+    .instruction();
+    send(ctx, ix, &[&member])
+}
+
+pub fn close_member_ata(ctx: &mut Ctx, sub: &Sub) {
+    drain_member(ctx, sub);
+    let member = sub.member.insecure_clone();
+    let ix = litesvm_token::spl_token::instruction::close_account(
+        &litesvm_token::spl_token::ID,
+        &sub.member_ata,
+        &member.pubkey(),
+        &member.pubkey(),
+        &[],
+    )
+    .unwrap();
+    send(ctx, ix, &[&member]).unwrap();
 }
 
 pub fn balance(ctx: &Ctx, token_account: Pubkey) -> u64 {

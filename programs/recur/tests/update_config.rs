@@ -81,9 +81,11 @@ fn update_config_can_hand_admin_over() {
 #[test]
 fn update_config_pauses_collect() {
     let (mut ctx, sub) = common::configured_sub(30 * common::USDC, 720);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    common::warp(&mut ctx, 720 * 3_600);
     common::set_paused(&mut ctx);
     assert!(common::fetch_config(&ctx).paused);
-    let result = common::collect(&mut ctx, &sub, 30 * common::USDC, None);
+    let result = common::collect(&mut ctx, &sub, None);
     assert!(common::err_is(&result, RecurError::Paused));
 }
 

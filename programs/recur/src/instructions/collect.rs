@@ -3,16 +3,20 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use subscriptions::{
     instructions::{TransferSubscription, TransferSubscriptionInstructionArgs},
     types::TransferData,
-    Plan, SUBSCRIPTIONS_ID,
+    SUBSCRIPTIONS_ID,
 };
 
-use crate::{bps_of, fee_for, Config, RecurError, CONFIG_SEED, MAX_BPS, PULLER_SEED, TRANSIT_SEED};
+use crate::{
+    rail, split, Config, Membership, Merchant, RecurError, CONFIG_SEED, MEMBERSHIP_SEED,
+    MERCHANT_SEED, PULLER_SEED, TRANSIT_SEED,
+};
 
 #[derive(Accounts)]
 pub struct Collect<'info> {
-    pub caller: Signer<'info>,
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, Config>,
+    #[account(seeds = [MERCHANT_SEED, merchant.owner.as_ref()], bump = merchant.bump)]
+    pub merchant: Account<'info, Merchant>,
     #[account(seeds = [PULLER_SEED], bump)]
     pub puller: SystemAccount<'info>,
     #[account(seeds = [TRANSIT_SEED], bump)]
@@ -31,6 +35,12 @@ pub struct Collect<'info> {
     pub subscription_authority: UncheckedAccount<'info>,
     #[account(mut, token::mint = mint)]
     pub member_ata: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [MEMBERSHIP_SEED, plan.key().as_ref(), member_ata.owner.as_ref()],
+        bump = membership.bump
+    )]
+    pub membership: Account<'info, Membership>,
     #[account(mut, token::mint = mint)]
     pub merchant_ata: Account<'info, TokenAccount>,
     #[account(mut, token::mint = mint, constraint = treasury_ata.owner == config.treasury)]
@@ -45,37 +55,54 @@ pub struct Collect<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-pub fn handle_collect(ctx: Context<Collect>, amount: u64, referral_bps: u16) -> Result<()> {
+pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
     let accounts = &ctx.accounts;
     require!(!accounts.config.paused, RecurError::Paused);
-    require!(referral_bps <= MAX_BPS, RecurError::FeeTooHigh);
 
-    let plan = Plan::from_bytes(&accounts.plan.try_borrow_data()?)
-        .map_err(|_| error!(RecurError::NotRecurPuller))?;
+    let plan = rail::read_plan(&accounts.plan)?;
     require!(
         plan.data.pullers.contains(&accounts.puller.key()),
         RecurError::NotRecurPuller
     );
+    require_keys_eq!(accounts.mint.key(), plan.data.mint);
+    require_keys_eq!(accounts.merchant.owner, plan.owner);
     require_keys_eq!(accounts.merchant_ata.owner, plan.owner);
-    require_eq!(amount, plan.data.terms.amount, RecurError::AmountMismatch);
 
+    let membership = &accounts.membership;
+    match (membership.referrer, &accounts.referrer_ata) {
+        (Some(referrer), Some(referrer_ata)) => {
+            require_keys_eq!(referrer_ata.owner, referrer, RecurError::ReferrerMismatch)
+        }
+        (None, None) => {}
+        _ => return err!(RecurError::ReferrerMismatch),
+    }
+
+    let amount = plan.data.terms.amount;
     pull_into_transit(&ctx, amount)?;
 
-    let fee = fee_for(amount, accounts.config.fee_bps, accounts.config.min_fee)?;
-    let after_fee = amount.checked_sub(fee).ok_or(RecurError::MathOverflow)?;
-    let referral = match accounts.referrer_ata {
-        Some(_) => bps_of(after_fee, referral_bps)?,
-        None => 0,
-    };
-    let to_merchant = after_fee
-        .checked_sub(referral)
+    let subscription = rail::read_subscription(&accounts.subscription)?;
+    let period_end = subscription
+        .current_period_start_ts
+        .checked_add(rail::period_secs(&subscription.terms)?)
         .ok_or(RecurError::MathOverflow)?;
+    let now = Clock::get()?.unix_timestamp;
+    let shares = split(
+        amount,
+        &accounts.config,
+        &accounts.merchant,
+        membership.referral_bps,
+        now,
+    )?;
 
-    pay_out(&ctx, &accounts.treasury_ata, fee)?;
+    pay_out(&ctx, &accounts.treasury_ata, shares.fee)?;
     if let Some(referrer_ata) = &accounts.referrer_ata {
-        pay_out(&ctx, referrer_ata, referral)?;
+        pay_out(&ctx, referrer_ata, shares.referral)?;
     }
-    pay_out(&ctx, &accounts.merchant_ata, to_merchant)
+    pay_out(&ctx, &accounts.merchant_ata, shares.merchant)?;
+
+    let membership = &mut ctx.accounts.membership;
+    membership.paid_until = membership.paid_until.max(period_end);
+    Ok(())
 }
 
 fn pull_into_transit(ctx: &Context<Collect>, amount: u64) -> Result<()> {

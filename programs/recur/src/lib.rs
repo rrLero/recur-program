@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod fee;
 pub mod instructions;
+pub mod rail;
 pub mod state;
 
 use anchor_lang::prelude::*;
@@ -25,8 +26,12 @@ pub mod recur {
         instructions::init_config::handle_init_config(ctx, fee_bps, min_fee, treasury)
     }
 
-    pub fn collect(ctx: Context<Collect>, amount: u64, referral_bps: u16) -> Result<()> {
-        instructions::collect::handle_collect(ctx, amount, referral_bps)
+    pub fn collect(ctx: Context<Collect>) -> Result<()> {
+        instructions::collect::handle_collect(ctx)
+    }
+
+    pub fn subscribe_hook(ctx: Context<SubscribeHook>, referrer: Option<Pubkey>) -> Result<()> {
+        instructions::subscribe_hook::handle_subscribe_hook(ctx, referrer)
     }
 
     pub fn update_config(

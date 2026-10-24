@@ -34,3 +34,64 @@ pub struct Merchant {
 
 pub const PULLER_SEED: &[u8] = b"puller";
 pub const TRANSIT_SEED: &[u8] = b"transit";
+
+pub const MEMBERSHIP_SEED: &[u8] = b"membership";
+pub const MEMBERSHIP_VERSION: u8 = 1;
+
+#[derive(AnchorSerialize, AnchorDeserialize, InitSpace, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MembershipSource {
+    Paid,
+    Comp,
+    Upfront,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct Membership {
+    pub version: u8,
+    pub bump: u8,
+    pub member: Pubkey,
+    pub plan: Pubkey,
+    pub merchant: Pubkey,
+    pub paid_until: i64,
+    pub source: MembershipSource,
+    pub referrer: Option<Pubkey>,
+    pub referral_bps: u16,
+    pub rent_payer: Pubkey,
+    pub created_at: i64,
+    pub reserved: [u8; 64],
+}
+
+pub struct MembershipIdentity {
+    pub bump: u8,
+    pub member: Pubkey,
+    pub plan: Pubkey,
+    pub merchant: Pubkey,
+    pub rent_payer: Pubkey,
+}
+
+impl Membership {
+    pub fn can_reopen(&self, now: i64) -> bool {
+        self.created_at == 0 || self.paid_until <= now || self.source == MembershipSource::Comp
+    }
+
+    pub fn open(
+        &mut self,
+        identity: MembershipIdentity,
+        referrer: Option<Pubkey>,
+        referral_bps: u16,
+        now: i64,
+    ) {
+        if self.created_at == 0 {
+            self.version = MEMBERSHIP_VERSION;
+            self.bump = identity.bump;
+            self.member = identity.member;
+            self.plan = identity.plan;
+            self.merchant = identity.merchant;
+            self.rent_payer = identity.rent_payer;
+            self.created_at = now;
+        }
+        self.referrer = referrer;
+        self.referral_bps = referral_bps;
+    }
+}

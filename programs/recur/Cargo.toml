@@ -19,7 +19,7 @@ custom-heap = []
 custom-panic = []
 
 [dependencies]
-anchor-lang = "1.2.1"
+anchor-lang = { version = "1.2.1", features = ["init-if-needed"] }
 anchor-spl = "1.2.1"
 subscriptions = "=0.5.0"
 
@@ -27,9 +27,11 @@ subscriptions = "=0.5.0"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
 
 [dev-dependencies]
+borsh = "1"
 litesvm = "0.18.1"
 litesvm-token = "0.18.1"
 sha2 = "0.10"
+solana-account = "4"
 solana-clock = "3"
 solana-instruction = "3"
 solana-keypair = "3"

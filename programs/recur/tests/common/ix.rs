@@ -90,19 +90,42 @@ pub fn sweep_transit_ix(admin: Pubkey, transit_ata: Pubkey, treasury_ata: Pubkey
     }
 }
 
-pub fn collect_ix(
-    accounts: recur::accounts::Collect,
-    amount: u64,
-    referral_bps: u16,
-) -> Instruction {
+pub fn membership_pda(plan: &Pubkey, member: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(
+        &[recur::MEMBERSHIP_SEED, plan.as_ref(), member.as_ref()],
+        &recur::ID,
+    )
+    .0
+}
+
+pub fn collect_ix(accounts: recur::accounts::Collect) -> Instruction {
     Instruction {
         program_id: recur::ID,
         accounts: accounts.to_account_metas(None),
-        data: recur::instruction::Collect {
-            amount,
-            referral_bps,
+        data: recur::instruction::Collect {}.data(),
+    }
+}
+
+pub fn subscribe_hook_ix(
+    member: Pubkey,
+    payer: Pubkey,
+    plan: Pubkey,
+    merchant_owner: Pubkey,
+    referrer: Option<Pubkey>,
+) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: recur::accounts::SubscribeHook {
+            member,
+            payer,
+            config: config_pda(),
+            plan,
+            merchant: merchant_pda(&merchant_owner),
+            membership: membership_pda(&plan, &member),
+            system_program: solana_sdk_ids::system_program::ID,
         }
-        .data(),
+        .to_account_metas(None),
+        data: recur::instruction::SubscribeHook { referrer }.data(),
     }
 }
 
@@ -120,7 +143,11 @@ pub fn register_merchant_ix(owner: Pubkey, payer: Pubkey, referral_bps: u16) -> 
     }
 }
 
-pub fn update_merchant_ix(signer: Pubkey, merchant_owner: Pubkey, referral_bps: u16) -> Instruction {
+pub fn update_merchant_ix(
+    signer: Pubkey,
+    merchant_owner: Pubkey,
+    referral_bps: u16,
+) -> Instruction {
     Instruction {
         program_id: recur::ID,
         accounts: recur::accounts::UpdateMerchant {

@@ -46,7 +46,8 @@ programs/recur/
   src/lib.rs              declare_id! and thin #[program] handlers
   src/state.rs            accounts and PDA seeds
   src/errors.rs           RecurError
-  src/fee.rs              fee_for, bps_of
+  src/fee.rs              fee_for, bps_of, split
+  src/rail.rs             reads rail plans and subscriptions
   src/instructions/       one file per instruction: Accounts struct + handle_<name>
   tests/common/mod.rs     LiteSVM setup, rail plan + subscription fixtures
   tests/<name>.rs         one file per instruction
@@ -61,6 +62,8 @@ PDA seeds:
 | `Config` | `["config"]` |
 | puller | `["puller"]` |
 | transit | `["transit"]` |
+| `Merchant` | `["merchant", owner]` |
+| `Membership` | `["membership", plan, member]` |
 | rail Subscription Authority | `["SubscriptionAuthority", member, mint]` (rail program) |
 | rail plan | `["plan", merchant, plan_id_le]` (rail program) |
 | rail subscription | `["subscription", plan, member]` (rail program) |
