@@ -1,6 +1,6 @@
 # apps/solana
 
-The `recur` Anchor program (`@repo/solana`). The root `AGENTS.md` still applies; this file adds the on-chain rules. Product design: `docs/superpowers/specs/2026-10-24-onchain-subscriptions-design.md`. Decisions and their reasons: `docs/adr/0011-solana-program-and-rail.md`.
+The `recur` Anchor program (`@repo/solana`). The root `AGENTS.md` still applies; this file adds the on-chain rules. Product design: `docs/superpowers/specs/2026-10-24-onchain-subscriptions-design.md`. Decisions and their reasons: `docs/adr/0011-solana-program-and-rail.md` (the rail) and `docs/adr/0012-recur-program-accounts.md` (accounts, referrals and policies).
 
 ## Concepts you need here
 
@@ -81,11 +81,11 @@ A failing tool names the rule number. Fix the code, never the rule.
 | 4 | No `unwrap`/`expect` in program code (tests may) | reviewer |
 | 5 | Every instruction has a success test and a test per failure path | reviewer |
 | 6 | Every account has `version` and `reserved` padding; new fields take bytes from `reserved` and bump `version` | reviewer |
-| 7 | Access never follows the rail's "active": it follows `paid_until` advanced by a successful `collect` | reviewer |
+| 7 | Access never follows the rail's "active": it follows `paid_until`, advanced by a successful `collect` or `pay_upfront`, or set by `grant_comp` | reviewer |
 | 8 | The transit balance ends every instruction at 0 | tests (`collect.rs`) |
 | 9 | Never hand-edit `target/`, the rail fixture or `@repo/solana-client/src/generated` | guard hook |
 | 10 | No comments except Anchor's `/// CHECK:` | `pnpm lint:comments` |
-| 11 | Permissionless instructions constrain every payout account (plan owner, `config.treasury`); nothing a caller passes decides where money goes | reviewer |
+| 11 | Permissionless instructions constrain every payout account (plan owner, `config.treasury`, `membership.referrer`); nothing a caller passes decides where money goes | reviewer |
 
 ## Recipes
 
