@@ -134,3 +134,27 @@ fn comp_converts_to_paid_at_comp_end() {
     assert_eq!(common::balance(&ctx, sub.merchant_ata), 29_400_000);
     assert_eq!(common::balance(&ctx, sub.transit_ata), 0);
 }
+
+#[test]
+fn revoke_comp_rejects_another_plans_membership() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    let now = common::now(&ctx);
+    common::grant_comp(&mut ctx, &sub, now + 30 * DAY).unwrap();
+    let other_plan = common::second_plan(&mut ctx, &sub);
+    let ix = solana_instruction::Instruction {
+        program_id: recur::ID,
+        accounts: anchor_lang::ToAccountMetas::to_account_metas(
+            &recur::accounts::RevokeComp {
+                owner: sub.merchant.pubkey(),
+                plan: other_plan,
+                membership: common::membership_pda(&sub.plan, &sub.member.pubkey()),
+            },
+            None,
+        ),
+        data: anchor_lang::InstructionData::data(&recur::instruction::RevokeComp {}),
+    };
+    let merchant = sub.merchant.insecure_clone();
+    let result = common::send(&mut ctx, ix, &[&merchant]);
+    assert!(common::anchor_err_is(&result, 2003));
+    assert_eq!(common::paid_until(&ctx, &sub), Some(now + 30 * DAY));
+}

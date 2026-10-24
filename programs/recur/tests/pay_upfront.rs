@@ -148,3 +148,19 @@ fn pay_upfront_rejects_recurring_plan() {
     assert_eq!(common::balance(&ctx, sub.member_ata), 1_000 * USDC);
     assert!(common::try_fetch_membership(&ctx, &sub).is_none());
 }
+
+#[test]
+fn pay_upfront_rejects_wrong_mint() {
+    let (mut ctx, sub) = common::configured_upfront(PRICE, HOURS);
+    let mint = common::new_mint(&mut ctx);
+    let treasury = common::fetch_config(&ctx).treasury;
+    let mut accounts = common::pay_upfront_accounts(&sub, None);
+    accounts.mint = mint;
+    accounts.member_ata = common::ata(&mut ctx, &mint, &sub.member.pubkey());
+    accounts.merchant_ata = common::ata(&mut ctx, &mint, &sub.merchant.pubkey());
+    accounts.treasury_ata = common::ata(&mut ctx, &mint, &treasury);
+    let result = common::pay_upfront_with(&mut ctx, &sub, accounts, None);
+    assert!(common::anchor_err_is(&result, 2502));
+    assert!(common::try_fetch_membership(&ctx, &sub).is_none());
+    assert_eq!(common::balance(&ctx, sub.member_ata), 1_000 * USDC);
+}

@@ -104,3 +104,36 @@ fn close_works_while_paused() {
     common::close(&mut ctx, &sub).unwrap();
     assert!(common::try_fetch_membership(&ctx, &sub).is_none());
 }
+
+#[test]
+fn sponsored_rent_payer_is_recorded_and_refunded_on_close() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    let sponsor = common::funded_keypair(&mut ctx);
+    let member = sub.member.insecure_clone();
+    let ixs = [
+        common::rail_subscribe_ix(&ctx, &sub),
+        common::ix::subscribe_hook_ix(
+            sub.member.pubkey(),
+            sponsor.pubkey(),
+            sub.plan,
+            sub.merchant.pubkey(),
+            None,
+        ),
+        common::ix::collect_ix(common::collect_accounts(&sub, None)),
+    ];
+    common::send_many(&mut ctx, &ixs, &[&sponsor, &member]).unwrap();
+    assert_eq!(
+        common::fetch_membership(&ctx, &sub).rent_payer,
+        sponsor.pubkey()
+    );
+    common::cancel_subscription_now(&mut ctx, &sub).unwrap();
+    common::warp(&mut ctx, PERIOD + DAY);
+    let wrong = common::close_with(&mut ctx, common::close_accounts(&sub, sub.member.pubkey()));
+    assert!(common::anchor_err_is(&wrong, 2012));
+    let membership = common::ix::membership_pda(&sub.plan, &sub.member.pubkey());
+    let rent = ctx.svm.get_account(&membership).unwrap().lamports;
+    let before = ctx.svm.get_balance(&sponsor.pubkey()).unwrap();
+    common::close(&mut ctx, &sub).unwrap();
+    assert_eq!(ctx.svm.get_balance(&sponsor.pubkey()).unwrap(), before + rent);
+    assert!(ctx.svm.get_account(&membership).is_none());
+}

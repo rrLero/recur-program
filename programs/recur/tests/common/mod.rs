@@ -236,7 +236,7 @@ fn funded(ctx: &mut Ctx) -> Keypair {
     kp
 }
 
-fn ata(ctx: &mut Ctx, mint: &Pubkey, owner: &Pubkey) -> Pubkey {
+pub fn ata(ctx: &mut Ctx, mint: &Pubkey, owner: &Pubkey) -> Pubkey {
     let admin = ctx.admin.insecure_clone();
     CreateAssociatedTokenAccount::new(&mut ctx.svm, &admin, mint)
         .owner(owner)
@@ -284,6 +284,82 @@ fn create_rail_plan(
     });
     send(ctx, create_plan, &[merchant]).unwrap();
     plan
+}
+
+pub fn second_plan(ctx: &mut Ctx, sub: &Sub) -> Pubkey {
+    let merchant = sub.merchant.insecure_clone();
+    let price = subscriptions::Plan::from_bytes(&ctx.svm.get_account(&sub.plan).unwrap().data)
+        .unwrap()
+        .data
+        .terms;
+    let pullers = [
+        puller_pda(),
+        Pubkey::default(),
+        Pubkey::default(),
+        Pubkey::default(),
+    ];
+    create_rail_plan(
+        ctx,
+        &merchant,
+        &sub.mint,
+        3,
+        price.amount,
+        price.period_hours,
+        pullers,
+    )
+}
+
+pub fn new_mint(ctx: &mut Ctx) -> Pubkey {
+    let admin = ctx.admin.insecure_clone();
+    CreateMint::new(&mut ctx.svm, &admin)
+        .decimals(6)
+        .send()
+        .unwrap()
+}
+
+pub fn init_subscription_authority_ix(sub: &Sub, payer: Option<Pubkey>) -> Instruction {
+    InitSubscriptionAuthority {
+        owner: sub.member.pubkey(),
+        subscription_authority: sub.subscription_authority,
+        token_mint: sub.mint,
+        user_ata: sub.member_ata,
+        system_program: solana_sdk_ids::system_program::ID,
+        token_program: litesvm_token::spl_token::ID,
+        payer,
+    }
+    .instruction()
+}
+
+pub fn new_member(ctx: &mut Ctx, sub: &Sub, init_authority: bool) -> Sub {
+    let member = funded(ctx);
+    let member_ata = ata(ctx, &sub.mint, &member.pubkey());
+    let admin = ctx.admin.insecure_clone();
+    MintTo::new(&mut ctx.svm, &admin, &sub.mint, &member_ata, 1_000 * USDC)
+        .send()
+        .unwrap();
+    let other = Sub {
+        mint: sub.mint,
+        subscription_authority: rail_pda(&[
+            b"SubscriptionAuthority",
+            member.pubkey().as_ref(),
+            sub.mint.as_ref(),
+        ]),
+        subscription: rail_subscription_pda(&sub.plan, &member.pubkey()),
+        member,
+        merchant: sub.merchant.insecure_clone(),
+        referrer: sub.referrer,
+        plan: sub.plan,
+        member_ata,
+        merchant_ata: sub.merchant_ata,
+        treasury_ata: sub.treasury_ata,
+        referrer_ata: sub.referrer_ata,
+        transit_ata: sub.transit_ata,
+    };
+    if init_authority {
+        let member = other.member.insecure_clone();
+        send(ctx, init_subscription_authority_ix(&other, None), &[&member]).unwrap();
+    }
+    other
 }
 
 pub fn configured_upfront(price: u64, period_hours: u64) -> (Ctx, Sub) {
@@ -414,8 +490,6 @@ pub fn configured_sub_with_pullers(
 }
 
 pub fn rail_subscribe_ix(ctx: &Ctx, sub: &Sub) -> Instruction {
-    let plan_account =
-        subscriptions::Plan::from_bytes(&ctx.svm.get_account(&sub.plan).unwrap().data).unwrap();
     let sa_account = SubscriptionAuthority::from_bytes(
         &ctx.svm
             .get_account(&sub.subscription_authority)
@@ -423,6 +497,17 @@ pub fn rail_subscribe_ix(ctx: &Ctx, sub: &Sub) -> Instruction {
             .data,
     )
     .unwrap();
+    rail_subscribe_ix_with(ctx, sub, None, sa_account.init_id)
+}
+
+pub fn rail_subscribe_ix_with(
+    ctx: &Ctx,
+    sub: &Sub,
+    payer: Option<Pubkey>,
+    authority_init_id: i64,
+) -> Instruction {
+    let plan_account =
+        subscriptions::Plan::from_bytes(&ctx.svm.get_account(&sub.plan).unwrap().data).unwrap();
     Subscribe {
         subscriber: sub.member.pubkey(),
         merchant: sub.merchant.pubkey(),
@@ -432,7 +517,7 @@ pub fn rail_subscribe_ix(ctx: &Ctx, sub: &Sub) -> Instruction {
         system_program: solana_sdk_ids::system_program::ID,
         event_authority: rail_pda(&[b"event_authority"]),
         self_program: SUBSCRIPTIONS_ID,
-        payer: None,
+        payer,
     }
     .instruction(SubscribeInstructionArgs {
         subscribe_data: SubscribeData {
@@ -442,7 +527,7 @@ pub fn rail_subscribe_ix(ctx: &Ctx, sub: &Sub) -> Instruction {
             expected_amount: plan_account.data.terms.amount,
             expected_period_hours: plan_account.data.terms.period_hours,
             expected_created_at: plan_account.data.terms.created_at,
-            expected_subscription_authority_init_id: sa_account.init_id,
+            expected_subscription_authority_init_id: authority_init_id,
         },
     })
 }

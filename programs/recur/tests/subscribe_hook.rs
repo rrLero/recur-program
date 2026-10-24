@@ -210,3 +210,45 @@ fn subscribe_hook_rejects_recur_pda_as_referrer() {
     assert!(common::err_is(&result, RecurError::SelfReferral));
     assert!(common::try_fetch_membership(&ctx, &sub).is_none());
 }
+
+#[test]
+fn worst_case_subscribe_bundle_fits_one_transaction() {
+    let (mut ctx, first) = common::configured_sub(PRICE, 720);
+    let sub = common::new_member(&mut ctx, &first, false);
+    let sponsor = common::funded_keypair(&mut ctx);
+    let init_id = i64::try_from(ctx.svm.get_sysvar::<solana_clock::Clock>().slot).unwrap();
+    let compute_budget: Pubkey = "ComputeBudget111111111111111111111111111111"
+        .parse()
+        .unwrap();
+    let set_limit = [&[2u8][..], &400_000u32.to_le_bytes()].concat();
+    let set_price = [&[3u8][..], &1_000u64.to_le_bytes()].concat();
+    let ixs = [
+        solana_instruction::Instruction::new_with_bytes(compute_budget, &set_limit, vec![]),
+        solana_instruction::Instruction::new_with_bytes(compute_budget, &set_price, vec![]),
+        common::init_subscription_authority_ix(&sub, Some(sponsor.pubkey())),
+        common::rail_subscribe_ix_with(&ctx, &sub, Some(sponsor.pubkey()), init_id),
+        common::ix::subscribe_hook_ix(
+            sub.member.pubkey(),
+            sponsor.pubkey(),
+            sub.plan,
+            sub.merchant.pubkey(),
+            Some(sub.referrer),
+        ),
+        common::ix::collect_ix(common::collect_accounts(&sub, Some(sub.referrer_ata))),
+    ];
+    let member = sub.member.insecure_clone();
+    let tx = solana_transaction::Transaction::new_signed_with_payer(
+        &ixs,
+        Some(&sponsor.pubkey()),
+        &[&sponsor, &member],
+        ctx.svm.latest_blockhash(),
+    );
+    let size = 1 + 64 * tx.signatures.len() + tx.message_data().len();
+    println!("worst-case subscribe bundle: {size} bytes");
+    assert!(size <= 1232, "bundle is {size} bytes");
+    ctx.svm.send_transaction(tx).unwrap();
+    let membership = common::fetch_membership(&ctx, &sub);
+    assert_eq!(membership.rent_payer, sponsor.pubkey());
+    assert_eq!(membership.referrer, Some(sub.referrer));
+    assert_eq!(membership.source, MembershipSource::Paid);
+}

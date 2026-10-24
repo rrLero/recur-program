@@ -8,6 +8,8 @@ use solana_signer::Signer;
 const PRICE: u64 = 30 * USDC;
 const PERIOD: i64 = 720 * 3600;
 const DAY: i64 = 86_400;
+const RAIL_UNAUTHORIZED: u32 = 0x82;
+const RAIL_SUBSCRIPTION_PLAN_MISMATCH: u32 = 0x1f9;
 
 fn assert_untouched(ctx: &common::Ctx, sub: &common::Sub, paid_until: Option<i64>) {
     assert_eq!(common::balance(ctx, sub.transit_ata), 0);
@@ -265,4 +267,65 @@ fn collect_refuses_while_upfront_active() {
     );
     assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
     assert_eq!(common::balance(&ctx, sub.merchant_ata), merchant_before);
+}
+
+#[test]
+fn collect_rejects_another_members_subscription() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    let other = common::new_member(&mut ctx, &sub, true);
+    common::subscribe(&mut ctx, &other, None).unwrap();
+    let paid_until = common::paid_until(&ctx, &sub);
+    common::warp(&mut ctx, PERIOD);
+    let mut accounts = common::collect_accounts(&sub, None);
+    accounts.subscription = other.subscription;
+    let payer = common::funded_keypair(&mut ctx);
+    let result = common::send(&mut ctx, common::ix::collect_ix(accounts), &[&payer]);
+    assert!(common::anchor_err_is(&result, RAIL_UNAUTHORIZED));
+    assert_untouched(&ctx, &sub, paid_until);
+    assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
+    assert_eq!(common::balance(&ctx, other.member_ata), 970 * USDC);
+}
+
+#[test]
+fn collect_rejects_another_plans_subscription() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    let mut other = common::new_member(&mut ctx, &sub, false);
+    other.member = sub.member.insecure_clone();
+    other.member_ata = sub.member_ata;
+    other.subscription_authority = sub.subscription_authority;
+    other.plan = common::second_plan(&mut ctx, &sub);
+    other.subscription = common::rail_subscription_pda(&other.plan, &sub.member.pubkey());
+    common::rail_subscribe(&mut ctx, &other).unwrap();
+    let paid_until = common::paid_until(&ctx, &sub);
+    common::warp(&mut ctx, PERIOD);
+    let mut accounts = common::collect_accounts(&sub, None);
+    accounts.subscription = other.subscription;
+    let payer = common::funded_keypair(&mut ctx);
+    let result = common::send(&mut ctx, common::ix::collect_ix(accounts), &[&payer]);
+    assert!(common::anchor_err_is(&result, RAIL_SUBSCRIPTION_PLAN_MISMATCH));
+    assert_untouched(&ctx, &sub, paid_until);
+    assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
+}
+
+#[test]
+fn collect_rejects_wrong_mint() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    let paid_until = common::paid_until(&ctx, &sub);
+    common::warp(&mut ctx, PERIOD);
+    let mint = common::new_mint(&mut ctx);
+    let treasury = common::fetch_config(&ctx).treasury;
+    let mut accounts = common::collect_accounts(&sub, None);
+    accounts.mint = mint;
+    accounts.transit_ata = common::ata(&mut ctx, &mint, &common::transit_pda());
+    accounts.member_ata = common::ata(&mut ctx, &mint, &sub.member.pubkey());
+    accounts.merchant_ata = common::ata(&mut ctx, &mint, &sub.merchant.pubkey());
+    accounts.treasury_ata = common::ata(&mut ctx, &mint, &treasury);
+    let payer = common::funded_keypair(&mut ctx);
+    let result = common::send(&mut ctx, common::ix::collect_ix(accounts), &[&payer]);
+    assert!(common::anchor_err_is(&result, 2502));
+    assert_untouched(&ctx, &sub, paid_until);
+    assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
 }
