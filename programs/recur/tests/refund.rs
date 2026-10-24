@@ -62,7 +62,7 @@ fn refund_rejects_wrong_member_account() {
     accounts.member_ata = stranger_ata;
     let merchant = sub.merchant.insecure_clone();
     let result = common::refund_with(&mut ctx, &merchant, accounts, 1, None);
-    assert!(result.is_err());
+    assert!(common::anchor_err_is(&result, 2015));
     assert_eq!(common::balance(&ctx, stranger_ata), 0);
 }
 

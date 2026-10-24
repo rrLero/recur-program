@@ -731,3 +731,13 @@ pub fn cancel_subscription_now(ctx: &mut Ctx, sub: &Sub) -> TxResult {
     let (member, merchant) = (sub.member.insecure_clone(), sub.merchant.insecure_clone());
     send(ctx, ix, &[&member, &merchant])
 }
+
+pub fn anchor_err_is(result: &TxResult, code: u32) -> bool {
+    matches!(
+        result,
+        Err(meta) if matches!(
+            meta.err,
+            TransactionError::InstructionError(_, InstructionError::Custom(c)) if c == code
+        )
+    )
+}

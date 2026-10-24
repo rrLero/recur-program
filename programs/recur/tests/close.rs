@@ -60,7 +60,7 @@ fn close_rejects_wrong_rent_payer() {
     common::grant_comp(&mut ctx, &sub, now + DAY).unwrap();
     common::warp(&mut ctx, DAY);
     let result = common::close_with(&mut ctx, common::close_accounts(&sub, Pubkey::new_unique()));
-    assert!(result.is_err());
+    assert!(common::anchor_err_is(&result, 2012));
     assert!(common::try_fetch_membership(&ctx, &sub).is_some());
 }
 
@@ -77,4 +77,27 @@ fn subscribe_after_close_reopens_fresh() {
     let second = common::fetch_membership(&ctx, &sub);
     assert_eq!(second.rent_payer, sub.member.pubkey());
     assert!(second.created_at > first.created_at);
+}
+
+#[test]
+fn close_rejects_foreign_subscription_account() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    common::warp(&mut ctx, PERIOD + DAY);
+    let mut accounts = common::close_accounts(&sub, sub.member.pubkey());
+    accounts.subscription = Pubkey::new_unique();
+    let result = common::close_with(&mut ctx, accounts);
+    assert!(common::anchor_err_is(&result, 2006));
+    assert!(common::try_fetch_membership(&ctx, &sub).is_some());
+}
+
+#[test]
+fn close_works_while_paused() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    let now = common::now(&ctx);
+    common::grant_comp(&mut ctx, &sub, now + DAY).unwrap();
+    common::warp(&mut ctx, DAY);
+    common::set_paused(&mut ctx);
+    common::close(&mut ctx, &sub).unwrap();
+    assert!(common::try_fetch_membership(&ctx, &sub).is_none());
 }
