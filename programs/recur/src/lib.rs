@@ -82,4 +82,12 @@ pub mod recur {
     pub fn revoke_comp(ctx: Context<RevokeComp>) -> Result<()> {
         instructions::comp::handle_revoke_comp(ctx)
     }
+
+    pub fn refund(ctx: Context<Refund>, amount: u64, paid_until: Option<i64>) -> Result<()> {
+        instructions::refund::handle_refund(ctx, amount, paid_until)
+    }
+
+    pub fn close(ctx: Context<Close>) -> Result<()> {
+        instructions::close::handle_close(ctx)
+    }
 }

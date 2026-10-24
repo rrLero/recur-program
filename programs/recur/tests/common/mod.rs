@@ -668,3 +668,66 @@ pub fn drain_member(ctx: &mut Ctx, sub: &Sub) {
     solana_program_pack::Pack::pack(token, &mut account.data).unwrap();
     ctx.svm.set_account(sub.member_ata, account).unwrap();
 }
+
+pub fn refund_accounts(sub: &Sub) -> recur::accounts::Refund {
+    recur::accounts::Refund {
+        owner: sub.merchant.pubkey(),
+        membership: membership_pda(&sub.plan, &sub.member.pubkey()),
+        owner_ata: sub.merchant_ata,
+        member_ata: sub.member_ata,
+        token_program: litesvm_token::spl_token::ID,
+    }
+}
+
+pub fn refund_with(
+    ctx: &mut Ctx,
+    signer: &Keypair,
+    accounts: recur::accounts::Refund,
+    amount: u64,
+    paid_until: Option<i64>,
+) -> TxResult {
+    send(ctx, ix::refund_ix(accounts, amount, paid_until), &[signer])
+}
+
+pub fn refund(ctx: &mut Ctx, sub: &Sub, amount: u64, paid_until: Option<i64>) -> TxResult {
+    let merchant = sub.merchant.insecure_clone();
+    refund_with(ctx, &merchant, refund_accounts(sub), amount, paid_until)
+}
+
+pub fn close_accounts(sub: &Sub, rent_payer: Pubkey) -> recur::accounts::Close {
+    recur::accounts::Close {
+        membership: membership_pda(&sub.plan, &sub.member.pubkey()),
+        rent_payer,
+        subscription: sub.subscription,
+    }
+}
+
+pub fn close_with(ctx: &mut Ctx, accounts: recur::accounts::Close) -> TxResult {
+    let caller = funded_keypair(ctx);
+    send(ctx, ix::close_ix(accounts), &[&caller])
+}
+
+pub fn close(ctx: &mut Ctx, sub: &Sub) -> TxResult {
+    let rent_payer = fetch_membership(ctx, sub).rent_payer;
+    close_with(ctx, close_accounts(sub, rent_payer))
+}
+
+pub fn cancel_subscription_now(ctx: &mut Ctx, sub: &Sub) -> TxResult {
+    let account = ctx.svm.get_account(&sub.subscription).unwrap();
+    let subscription = subscriptions::SubscriptionDelegation::from_bytes(&account.data).unwrap();
+    let ix = subscriptions::instructions::CancelSubscriptionNow {
+        subscriber: sub.member.pubkey(),
+        merchant: sub.merchant.pubkey(),
+        plan_pda: sub.plan,
+        subscription_pda: sub.subscription,
+        event_authority: rail_pda(&[b"event_authority"]),
+        self_program: SUBSCRIPTIONS_ID,
+    }
+    .instruction(subscriptions::instructions::CancelSubscriptionNowInstructionArgs {
+        cancel_subscription_now_data: subscriptions::types::CancelSubscriptionNowData {
+            expected_current_period_start_ts: subscription.current_period_start_ts,
+        },
+    });
+    let (member, merchant) = (sub.member.insecure_clone(), sub.merchant.insecure_clone());
+    send(ctx, ix, &[&member, &merchant])
+}

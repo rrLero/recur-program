@@ -225,3 +225,23 @@ pub fn revoke_comp_ix(owner: Pubkey, plan: Pubkey, member: Pubkey) -> Instructio
         data: recur::instruction::RevokeComp {}.data(),
     }
 }
+
+pub fn refund_ix(
+    accounts: recur::accounts::Refund,
+    amount: u64,
+    paid_until: Option<i64>,
+) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: accounts.to_account_metas(None),
+        data: recur::instruction::Refund { amount, paid_until }.data(),
+    }
+}
+
+pub fn close_ix(accounts: recur::accounts::Close) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: accounts.to_account_metas(None),
+        data: recur::instruction::Close {}.data(),
+    }
+}
