@@ -74,4 +74,12 @@ pub mod recur {
             fee_free_until,
         )
     }
+
+    pub fn grant_comp(ctx: Context<GrantComp>, member: Pubkey, until: i64) -> Result<()> {
+        instructions::comp::handle_grant_comp(ctx, member, until)
+    }
+
+    pub fn revoke_comp(ctx: Context<RevokeComp>) -> Result<()> {
+        instructions::comp::handle_revoke_comp(ctx)
+    }
 }

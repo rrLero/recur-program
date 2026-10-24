@@ -191,3 +191,37 @@ pub fn pay_upfront_ix(
         data: recur::instruction::PayUpfront { referrer }.data(),
     }
 }
+
+pub fn grant_comp_ix(
+    owner: Pubkey,
+    payer: Pubkey,
+    plan: Pubkey,
+    member: Pubkey,
+    until: i64,
+) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: recur::accounts::GrantComp {
+            owner,
+            payer,
+            plan,
+            membership: membership_pda(&plan, &member),
+            system_program: solana_sdk_ids::system_program::ID,
+        }
+        .to_account_metas(None),
+        data: recur::instruction::GrantComp { member, until }.data(),
+    }
+}
+
+pub fn revoke_comp_ix(owner: Pubkey, plan: Pubkey, member: Pubkey) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: recur::accounts::RevokeComp {
+            owner,
+            plan,
+            membership: membership_pda(&plan, &member),
+        }
+        .to_account_metas(None),
+        data: recur::instruction::RevokeComp {}.data(),
+    }
+}

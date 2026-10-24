@@ -231,7 +231,7 @@ fn collect_without_membership_fails() {
 fn collect_marks_membership_paid() {
     let (mut ctx, sub) = common::configured_sub(PRICE, 720);
     let now = common::now(&ctx);
-    common::write_comp(&mut ctx, &sub, now + 60 * DAY);
+    common::grant_comp(&mut ctx, &sub, now + 60 * DAY).unwrap();
     common::subscribe(&mut ctx, &sub, None).unwrap();
     let membership = common::fetch_membership(&ctx, &sub);
     assert_eq!(membership.source, MembershipSource::Paid);

@@ -91,7 +91,7 @@ fn subscribe_hook_reopens_expired_membership_with_new_referrer() {
 fn subscribe_hook_on_comp_membership_never_shortens_access() {
     let (mut ctx, sub) = common::configured_sub(PRICE, 720);
     let now = common::now(&ctx);
-    common::write_comp(&mut ctx, &sub, now + 60 * DAY);
+    common::grant_comp(&mut ctx, &sub, now + 60 * DAY).unwrap();
     common::subscribe(&mut ctx, &sub, Some(sub.referrer)).unwrap();
     let membership = common::fetch_membership(&ctx, &sub);
     assert_eq!(membership.paid_until, now + 60 * DAY);
@@ -147,7 +147,7 @@ fn subscribe_hook_fails_when_paused() {
 fn subscribe_hook_alone_keeps_comp_source() {
     let (mut ctx, sub) = common::configured_sub(PRICE, 720);
     let now = common::now(&ctx);
-    common::write_comp(&mut ctx, &sub, now + 60 * DAY);
+    common::grant_comp(&mut ctx, &sub, now + 60 * DAY).unwrap();
     common::subscribe_hook(&mut ctx, &sub, Some(sub.referrer)).unwrap();
     let membership = common::fetch_membership(&ctx, &sub);
     assert_eq!(membership.source, MembershipSource::Comp);

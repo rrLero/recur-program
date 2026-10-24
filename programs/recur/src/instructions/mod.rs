@@ -1,4 +1,5 @@
 pub mod collect;
+pub mod comp;
 pub mod init_config;
 pub mod pay_upfront;
 pub mod register_merchant;
@@ -8,6 +9,7 @@ pub mod sweep_transit;
 pub mod update_config;
 
 pub use collect::*;
+pub use comp::*;
 pub use init_config::*;
 pub use pay_upfront::*;
 pub use register_merchant::*;

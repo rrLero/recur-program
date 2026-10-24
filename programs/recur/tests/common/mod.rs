@@ -534,25 +534,31 @@ pub fn paid_until(ctx: &Ctx, sub: &Sub) -> Option<i64> {
     try_fetch_membership(ctx, sub).map(|m| m.paid_until)
 }
 
-pub fn write_comp(ctx: &mut Ctx, sub: &Sub, paid_until: i64) {
-    let created_at = now(ctx);
-    write_membership(
+pub fn grant_comp_ix(sub: &Sub, member: Pubkey, until: i64) -> Instruction {
+    let merchant = sub.merchant.pubkey();
+    ix::grant_comp_ix(merchant, merchant, sub.plan, member, until)
+}
+
+pub fn grant_comp(ctx: &mut Ctx, sub: &Sub, until: i64) -> TxResult {
+    let merchant = sub.merchant.insecure_clone();
+    send(
         ctx,
-        &Membership {
-            version: recur::MEMBERSHIP_VERSION,
-            bump: 0,
-            member: sub.member.pubkey(),
-            plan: sub.plan,
-            merchant: sub.merchant.pubkey(),
-            paid_until,
-            source: recur::MembershipSource::Comp,
-            referrer: None,
-            referral_bps: 0,
-            rent_payer: sub.merchant.pubkey(),
-            created_at,
-            reserved: [0; 64],
-        },
-    );
+        grant_comp_ix(sub, sub.member.pubkey(), until),
+        &[&merchant],
+    )
+}
+
+pub fn revoke_comp_as(ctx: &mut Ctx, sub: &Sub, signer: &Keypair) -> TxResult {
+    send(
+        ctx,
+        ix::revoke_comp_ix(signer.pubkey(), sub.plan, sub.member.pubkey()),
+        &[signer],
+    )
+}
+
+pub fn revoke_comp(ctx: &mut Ctx, sub: &Sub) -> TxResult {
+    let merchant = sub.merchant.insecure_clone();
+    revoke_comp_as(ctx, sub, &merchant)
 }
 
 pub fn write_membership(ctx: &mut Ctx, membership: &Membership) {
