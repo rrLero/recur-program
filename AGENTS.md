@@ -24,7 +24,7 @@ sh -c "$(curl -sSfL https://release.anza.xyz/v4.3.2/install)"
 cargo install --git https://github.com/solana-foundation/anchor avm --force && avm install 1.2.1 && avm use 1.2.1
 ```
 
-zsh users: put `. "$HOME/.cargo/env"` and the Solana `active_release/bin` PATH line in `~/.zshrc`, not just `~/.profile`. Every script here starts with `scripts/require-solana-toolchain.mjs`, which names any missing tool. Prefix CLI calls with `NO_DNA=1` when an agent runs them (non-interactive output).
+zsh users: put `. "$HOME/.cargo/env"` and the Solana `active_release/bin` PATH line in `~/.zshrc`, not just `~/.profile`. Every script here starts with `scripts/require-solana-toolchain.mjs`, which names any missing tool. Install Anchor through `avm`: the check reads `~/.avm/.version` instead of running `anchor`, because any `anchor` command first switches the active Solana CLI (to the `Anchor.toml` pin inside this folder, to Anchor's own default outside it). Parallel turbo tasks doing that at once made the CLI briefly disappear. Prefix CLI calls with `NO_DNA=1` when an agent runs them (non-interactive output).
 
 ## Stack
 
