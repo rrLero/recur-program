@@ -16,3 +16,6 @@ pub struct Config {
     pub paused: bool,
     pub reserved: [u8; 64],
 }
+
+pub const PULLER_SEED: &[u8] = b"puller";
+pub const TRANSIT_SEED: &[u8] = b"transit";

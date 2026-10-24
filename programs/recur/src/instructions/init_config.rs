@@ -17,7 +17,7 @@ pub struct InitConfig<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle(
+pub fn handle_init_config(
     ctx: Context<InitConfig>,
     fee_bps: u16,
     min_fee: u64,
