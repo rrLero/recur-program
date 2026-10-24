@@ -180,3 +180,14 @@ pub fn set_merchant_terms_ix(
         .data(),
     }
 }
+
+pub fn pay_upfront_ix(
+    accounts: recur::accounts::PayUpfront,
+    referrer: Option<Pubkey>,
+) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: accounts.to_account_metas(None),
+        data: recur::instruction::PayUpfront { referrer }.data(),
+    }
+}

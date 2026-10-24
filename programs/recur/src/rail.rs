@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use subscriptions::{
-    types::{AccountDiscriminator, PlanTerms},
+    types::{AccountDiscriminator, PlanStatus, PlanTerms},
     Plan, SubscriptionDelegation, SUBSCRIPTIONS_ID,
 };
 
@@ -47,4 +47,13 @@ pub fn period_secs(terms: &PlanTerms) -> Result<i64> {
         .ok()
         .and_then(|hours| hours.checked_mul(3600))
         .ok_or_else(|| error!(RecurError::MathOverflow))
+}
+
+pub fn require_plan_active(plan: &Plan, now: i64) -> Result<()> {
+    require!(
+        plan.status == PlanStatus::Active as u8
+            && (plan.data.end_ts == 0 || now <= plan.data.end_ts),
+        RecurError::PlanNotActive
+    );
+    Ok(())
 }

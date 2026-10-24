@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
-use subscriptions::{types::PlanStatus, SUBSCRIPTIONS_ID};
+use subscriptions::SUBSCRIPTIONS_ID;
 
 use crate::{
-    rail, Config, Membership, MembershipIdentity, Merchant, RecurError,
-    CONFIG_SEED, MEMBERSHIP_SEED, MERCHANT_SEED, PULLER_SEED,
+    rail, Config, Membership, MembershipIdentity, Merchant, RecurError, CONFIG_SEED,
+    MEMBERSHIP_SEED, MERCHANT_SEED, PULLER_SEED,
 };
 
 #[derive(Accounts)]
@@ -35,11 +35,7 @@ pub fn handle_subscribe_hook(ctx: Context<SubscribeHook>, referrer: Option<Pubke
 
     let plan = rail::read_plan(&accounts.plan)?;
     let now = Clock::get()?.unix_timestamp;
-    require!(
-        plan.status == PlanStatus::Active as u8
-            && (plan.data.end_ts == 0 || now <= plan.data.end_ts),
-        RecurError::PlanNotActive
-    );
+    rail::require_plan_active(&plan, now)?;
     let (puller, _) = Pubkey::find_program_address(&[PULLER_SEED], &crate::ID);
     require!(
         plan.data.pullers.contains(&puller),

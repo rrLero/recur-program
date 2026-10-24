@@ -242,6 +242,98 @@ fn ata(ctx: &mut Ctx, mint: &Pubkey, owner: &Pubkey) -> Pubkey {
         .unwrap()
 }
 
+fn create_rail_plan(
+    ctx: &mut Ctx,
+    merchant: &Keypair,
+    mint: &Pubkey,
+    plan_id: u64,
+    price: u64,
+    period_hours: u64,
+    pullers: [Pubkey; 4],
+) -> Pubkey {
+    let plan = rail_pda(&[b"plan", merchant.pubkey().as_ref(), &plan_id.to_le_bytes()]);
+    let create_plan = CreatePlan {
+        merchant: merchant.pubkey(),
+        plan_pda: plan,
+        token_mint: *mint,
+        system_program: solana_sdk_ids::system_program::ID,
+        token_program: litesvm_token::spl_token::ID,
+        payer: None,
+    }
+    .instruction(CreatePlanInstructionArgs {
+        plan_data: PlanData {
+            plan_id,
+            mint: *mint,
+            terms: PlanTerms {
+                amount: price,
+                period_hours,
+                created_at: 0,
+            },
+            end_ts: 0,
+            destinations: [
+                merchant.pubkey(),
+                transit_pda(),
+                Pubkey::default(),
+                Pubkey::default(),
+            ],
+            pullers,
+            metadata_uri: [0; 128],
+        },
+    });
+    send(ctx, create_plan, &[merchant]).unwrap();
+    plan
+}
+
+pub fn configured_upfront(price: u64, period_hours: u64) -> (Ctx, Sub) {
+    let (mut ctx, mut sub) = configured_sub(price, period_hours);
+    sub.plan = create_rail_plan(
+        &mut ctx,
+        &sub.merchant,
+        &sub.mint,
+        2,
+        price,
+        period_hours,
+        [Pubkey::default(); 4],
+    );
+    (ctx, sub)
+}
+
+pub fn pay_upfront_accounts(
+    sub: &Sub,
+    referrer_ata: Option<Pubkey>,
+) -> recur::accounts::PayUpfront {
+    recur::accounts::PayUpfront {
+        member: sub.member.pubkey(),
+        payer: sub.member.pubkey(),
+        config: config_pda(),
+        plan: sub.plan,
+        merchant: merchant_pda(&sub.merchant.pubkey()),
+        membership: membership_pda(&sub.plan, &sub.member.pubkey()),
+        mint: sub.mint,
+        member_ata: sub.member_ata,
+        merchant_ata: sub.merchant_ata,
+        treasury_ata: sub.treasury_ata,
+        referrer_ata,
+        token_program: litesvm_token::spl_token::ID,
+        system_program: solana_sdk_ids::system_program::ID,
+    }
+}
+
+pub fn pay_upfront_with(
+    ctx: &mut Ctx,
+    sub: &Sub,
+    accounts: recur::accounts::PayUpfront,
+    referrer: Option<Pubkey>,
+) -> TxResult {
+    let member = sub.member.insecure_clone();
+    send(ctx, ix::pay_upfront_ix(accounts, referrer), &[&member])
+}
+
+pub fn pay_upfront(ctx: &mut Ctx, sub: &Sub, referrer: Option<Pubkey>) -> TxResult {
+    let accounts = pay_upfront_accounts(sub, referrer.map(|r| ata_of(&sub.mint, &r)));
+    pay_upfront_with(ctx, sub, accounts, referrer)
+}
+
 pub fn configured_sub(price: u64, period_hours: u64) -> (Ctx, Sub) {
     configured_sub_with_pullers(
         price,
@@ -297,37 +389,7 @@ pub fn configured_sub_with_pullers(
     .instruction();
     send(&mut ctx, init_sa, &[&member]).unwrap();
 
-    let plan_id: u64 = 1;
-    let plan = rail_pda(&[b"plan", merchant.pubkey().as_ref(), &plan_id.to_le_bytes()]);
-    let create_plan = CreatePlan {
-        merchant: merchant.pubkey(),
-        plan_pda: plan,
-        token_mint: mint,
-        system_program: solana_sdk_ids::system_program::ID,
-        token_program: litesvm_token::spl_token::ID,
-        payer: None,
-    }
-    .instruction(CreatePlanInstructionArgs {
-        plan_data: PlanData {
-            plan_id,
-            mint,
-            terms: PlanTerms {
-                amount: price,
-                period_hours,
-                created_at: 0,
-            },
-            end_ts: 0,
-            destinations: [
-                merchant.pubkey(),
-                transit_pda(),
-                Pubkey::default(),
-                Pubkey::default(),
-            ],
-            pullers,
-            metadata_uri: [0; 128],
-        },
-    });
-    send(&mut ctx, create_plan, &[&merchant]).unwrap();
+    let plan = create_rail_plan(&mut ctx, &merchant, &mint, 1, price, period_hours, pullers);
 
     let subscription = rail_pda(&[b"subscription", plan.as_ref(), member.pubkey().as_ref()]);
 

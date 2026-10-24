@@ -34,6 +34,10 @@ pub mod recur {
         instructions::subscribe_hook::handle_subscribe_hook(ctx, referrer)
     }
 
+    pub fn pay_upfront(ctx: Context<PayUpfront>, referrer: Option<Pubkey>) -> Result<()> {
+        instructions::pay_upfront::handle_pay_upfront(ctx, referrer)
+    }
+
     pub fn update_config(
         ctx: Context<UpdateConfig>,
         new_admin: Pubkey,

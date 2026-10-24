@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::TokenAccount;
 
 use crate::RecurError;
 
@@ -102,6 +103,20 @@ impl Membership {
         self.referrer = referrer;
         self.referral_bps = referral_bps;
         Ok(())
+    }
+
+    pub fn require_referrer_account(
+        &self,
+        referrer_ata: Option<&Account<TokenAccount>>,
+    ) -> Result<()> {
+        match (self.referrer, referrer_ata) {
+            (Some(referrer), Some(referrer_ata)) => {
+                require_keys_eq!(referrer_ata.owner, referrer, RecurError::ReferrerMismatch);
+                Ok(())
+            }
+            (None, None) => Ok(()),
+            _ => err!(RecurError::ReferrerMismatch),
+        }
     }
 }
 

@@ -7,8 +7,8 @@ use subscriptions::{
 };
 
 use crate::{
-    rail, split, Config, Membership, MembershipSource, Merchant, RecurError, CONFIG_SEED, MEMBERSHIP_SEED,
-    MERCHANT_SEED, PULLER_SEED, TRANSIT_SEED,
+    rail, split, Config, Membership, MembershipSource, Merchant, RecurError, CONFIG_SEED,
+    MEMBERSHIP_SEED, MERCHANT_SEED, PULLER_SEED, TRANSIT_SEED,
 };
 
 #[derive(Accounts)]
@@ -69,13 +69,7 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
     require_keys_eq!(accounts.merchant_ata.owner, plan.owner);
 
     let membership = &accounts.membership;
-    match (membership.referrer, &accounts.referrer_ata) {
-        (Some(referrer), Some(referrer_ata)) => {
-            require_keys_eq!(referrer_ata.owner, referrer, RecurError::ReferrerMismatch)
-        }
-        (None, None) => {}
-        _ => return err!(RecurError::ReferrerMismatch),
-    }
+    membership.require_referrer_account(accounts.referrer_ata.as_ref())?;
 
     let amount = plan.data.terms.amount;
     pull_into_transit(&ctx, amount)?;
