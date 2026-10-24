@@ -120,3 +120,17 @@ fn revoke_comp_rejects_non_plan_owner() {
     assert!(common::err_is(&result, RecurError::Unauthorized));
     assert_eq!(common::paid_until(&ctx, &sub), Some(now + 30 * DAY));
 }
+
+#[test]
+fn comp_converts_to_paid_at_comp_end() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    let comp_until = common::now(&ctx) + 60 * DAY;
+    common::grant_comp(&mut ctx, &sub, comp_until).unwrap();
+    common::warp(&mut ctx, 60 * DAY);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    let membership = common::fetch_membership(&ctx, &sub);
+    assert_eq!(membership.source, MembershipSource::Paid);
+    assert_eq!(membership.paid_until, comp_until + 720 * 3600);
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), 29_400_000);
+    assert_eq!(common::balance(&ctx, sub.transit_ata), 0);
+}

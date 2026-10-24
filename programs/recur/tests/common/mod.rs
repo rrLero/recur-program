@@ -228,6 +228,10 @@ fn rail_pda(seeds: &[&[u8]]) -> Pubkey {
     Pubkey::find_program_address(seeds, &SUBSCRIPTIONS_ID).0
 }
 
+pub fn rail_subscription_pda(plan: &Pubkey, member: &Pubkey) -> Pubkey {
+    rail_pda(&[b"subscription", plan.as_ref(), member.as_ref()])
+}
+
 fn funded(ctx: &mut Ctx) -> Keypair {
     let kp = Keypair::new();
     ctx.svm.airdrop(&kp.pubkey(), 1_000_000_000).unwrap();
@@ -391,7 +395,7 @@ pub fn configured_sub_with_pullers(
 
     let plan = create_rail_plan(&mut ctx, &merchant, &mint, 1, price, period_hours, pullers);
 
-    let subscription = rail_pda(&[b"subscription", plan.as_ref(), member.pubkey().as_ref()]);
+    let subscription = rail_subscription_pda(&plan, &member.pubkey());
 
     let sub = Sub {
         mint,
@@ -723,11 +727,13 @@ pub fn cancel_subscription_now(ctx: &mut Ctx, sub: &Sub) -> TxResult {
         event_authority: rail_pda(&[b"event_authority"]),
         self_program: SUBSCRIPTIONS_ID,
     }
-    .instruction(subscriptions::instructions::CancelSubscriptionNowInstructionArgs {
-        cancel_subscription_now_data: subscriptions::types::CancelSubscriptionNowData {
-            expected_current_period_start_ts: subscription.current_period_start_ts,
+    .instruction(
+        subscriptions::instructions::CancelSubscriptionNowInstructionArgs {
+            cancel_subscription_now_data: subscriptions::types::CancelSubscriptionNowData {
+                expected_current_period_start_ts: subscription.current_period_start_ts,
+            },
         },
-    });
+    );
     let (member, merchant) = (sub.member.insecure_clone(), sub.merchant.insecure_clone());
     send(ctx, ix, &[&member, &merchant])
 }

@@ -92,12 +92,16 @@ fn subscribe_hook_on_comp_membership_never_shortens_access() {
     let (mut ctx, sub) = common::configured_sub(PRICE, 720);
     let now = common::now(&ctx);
     common::grant_comp(&mut ctx, &sub, now + 60 * DAY).unwrap();
-    common::subscribe(&mut ctx, &sub, Some(sub.referrer)).unwrap();
+    let result = common::subscribe(&mut ctx, &sub, Some(sub.referrer));
+    assert!(common::err_at(&result, 2, RecurError::PrepaidAccessActive));
     let membership = common::fetch_membership(&ctx, &sub);
     assert_eq!(membership.paid_until, now + 60 * DAY);
-    assert_eq!(membership.source, MembershipSource::Paid);
-    assert_eq!(membership.referrer, Some(sub.referrer));
+    assert_eq!(membership.source, MembershipSource::Comp);
+    assert_eq!(membership.referrer, None);
     assert_eq!(membership.rent_payer, sub.merchant.pubkey());
+    assert!(ctx.svm.get_account(&sub.subscription).is_none());
+    assert_eq!(common::balance(&ctx, sub.member_ata), 1_000 * USDC);
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), 0);
     assert_eq!(common::balance(&ctx, sub.transit_ata), 0);
 }
 

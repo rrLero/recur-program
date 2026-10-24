@@ -38,4 +38,6 @@ pub enum RecurError {
     SubscriptionLive,
     #[msg("Upfront payments need a plan Recur doesn't pull from")]
     NotUpfrontPlan,
+    #[msg("Membership is prepaid or comped until paid_until")]
+    PrepaidAccessActive,
 }

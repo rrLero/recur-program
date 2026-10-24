@@ -1,9 +1,7 @@
 use anchor_lang::prelude::*;
 use subscriptions::SUBSCRIPTIONS_ID;
 
-use crate::{
-    rail, Membership, MembershipIdentity, MembershipSource, RecurError, MEMBERSHIP_SEED,
-};
+use crate::{rail, Membership, MembershipIdentity, MembershipSource, RecurError, MEMBERSHIP_SEED};
 
 #[derive(Accounts)]
 #[instruction(member: Pubkey)]

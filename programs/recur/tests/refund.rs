@@ -18,7 +18,10 @@ fn refund_pays_member_from_merchant() {
     let paid_until = common::paid_until(&ctx, &sub);
     common::refund(&mut ctx, &sub, 10 * USDC, None).unwrap();
     assert_eq!(common::balance(&ctx, sub.member_ata), 980 * USDC);
-    assert_eq!(common::balance(&ctx, sub.merchant_ata), 29_400_000 - 10 * USDC);
+    assert_eq!(
+        common::balance(&ctx, sub.merchant_ata),
+        29_400_000 - 10 * USDC
+    );
     assert_eq!(common::paid_until(&ctx, &sub), paid_until);
 }
 

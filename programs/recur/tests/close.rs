@@ -19,7 +19,10 @@ fn close_returns_rent_to_rent_payer_after_cancel() {
     let rent = ctx.svm.get_account(&membership).unwrap().lamports;
     let before = ctx.svm.get_balance(&sub.member.pubkey()).unwrap();
     common::close(&mut ctx, &sub).unwrap();
-    assert_eq!(ctx.svm.get_balance(&sub.member.pubkey()).unwrap(), before + rent);
+    assert_eq!(
+        ctx.svm.get_balance(&sub.member.pubkey()).unwrap(),
+        before + rent
+    );
     assert!(ctx.svm.get_account(&membership).is_none());
 }
 

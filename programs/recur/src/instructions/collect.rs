@@ -69,6 +69,11 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
     require_keys_eq!(accounts.merchant_ata.owner, plan.owner);
 
     let membership = &accounts.membership;
+    let now = Clock::get()?.unix_timestamp;
+    require!(
+        membership.source == MembershipSource::Paid || membership.paid_until <= now,
+        RecurError::PrepaidAccessActive
+    );
     membership.require_referrer_account(accounts.referrer_ata.as_ref())?;
 
     let amount = plan.data.terms.amount;
@@ -89,7 +94,6 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
         .current_period_start_ts
         .checked_add(rail::period_secs(&subscription.terms)?)
         .ok_or(RecurError::MathOverflow)?;
-    let now = Clock::get()?.unix_timestamp;
     let shares = split(
         amount,
         &accounts.config,

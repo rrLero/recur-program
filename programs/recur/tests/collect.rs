@@ -228,13 +228,41 @@ fn collect_without_membership_fails() {
 }
 
 #[test]
-fn collect_marks_membership_paid() {
+fn collect_refuses_while_comp_active() {
     let (mut ctx, sub) = common::configured_sub(PRICE, 720);
-    let now = common::now(&ctx);
-    common::grant_comp(&mut ctx, &sub, now + 60 * DAY).unwrap();
     common::subscribe(&mut ctx, &sub, None).unwrap();
-    let membership = common::fetch_membership(&ctx, &sub);
-    assert_eq!(membership.source, MembershipSource::Paid);
-    assert_eq!(membership.paid_until, now + 60 * DAY);
-    assert_eq!(common::balance(&ctx, sub.transit_ata), 0);
+    common::warp(&mut ctx, PERIOD);
+    let comp_until = common::now(&ctx) + 60 * DAY;
+    common::grant_comp(&mut ctx, &sub, comp_until).unwrap();
+    let result = common::collect(&mut ctx, &sub, None);
+    assert!(common::err_is(&result, RecurError::PrepaidAccessActive));
+    assert_untouched(&ctx, &sub, Some(comp_until));
+    assert_eq!(
+        common::fetch_membership(&ctx, &sub).source,
+        MembershipSource::Comp
+    );
+    assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), 29_400_000);
+}
+
+#[test]
+fn collect_refuses_while_upfront_active() {
+    let (mut ctx, mut sub) = common::configured_upfront(PRICE, 720);
+    common::pay_upfront(&mut ctx, &sub, None).unwrap();
+    let paid_until = common::paid_until(&ctx, &sub);
+    common::set_plan(&mut ctx, &sub, |plan| {
+        plan.data.pullers[0] = common::puller_pda()
+    });
+    sub.subscription = common::rail_subscription_pda(&sub.plan, &sub.member.pubkey());
+    common::rail_subscribe(&mut ctx, &sub).unwrap();
+    let merchant_before = common::balance(&ctx, sub.merchant_ata);
+    let result = common::collect(&mut ctx, &sub, None);
+    assert!(common::err_is(&result, RecurError::PrepaidAccessActive));
+    assert_untouched(&ctx, &sub, paid_until);
+    assert_eq!(
+        common::fetch_membership(&ctx, &sub).source,
+        MembershipSource::Upfront
+    );
+    assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), merchant_before);
 }
