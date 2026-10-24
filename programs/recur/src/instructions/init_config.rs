@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 
+use crate::program::Recur;
 use crate::{Config, RecurError, CONFIG_SEED, CONFIG_VERSION, MAX_BPS};
 
 #[derive(Accounts)]
@@ -14,6 +15,13 @@ pub struct InitConfig<'info> {
         bump
     )]
     pub config: Account<'info, Config>,
+    #[account(constraint = program.programdata_address()? == Some(program_data.key()))]
+    pub program: Program<'info, Recur>,
+    #[account(
+        constraint = program_data.upgrade_authority_address == Some(admin.key())
+            @ RecurError::NotUpgradeAuthority
+    )]
+    pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,
 }
 

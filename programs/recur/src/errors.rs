@@ -12,4 +12,28 @@ pub enum RecurError {
     MathOverflow,
     #[msg("Collect must pull exactly the plan's price for one period")]
     AmountMismatch,
+    #[msg("Only the program's upgrade authority can do this")]
+    NotUpgradeAuthority,
+    #[msg("Only the admin can do this")]
+    Unauthorized,
+    #[msg("Referral basis points can't exceed 10000")]
+    ReferralTooHigh,
+    #[msg("A member can't refer themselves")]
+    SelfReferral,
+    #[msg("The member already has an active membership")]
+    AlreadyMember,
+    #[msg("The referrer account doesn't match the membership")]
+    ReferrerMismatch,
+    #[msg("The rail plan isn't active")]
+    PlanNotActive,
+    #[msg("The membership isn't a comp")]
+    NotComp,
+    #[msg("The comp end must be in the future")]
+    InvalidCompEnd,
+    #[msg("The membership can't be extended this way")]
+    CannotExtend,
+    #[msg("The membership is still active")]
+    MembershipActive,
+    #[msg("The rail subscription is still live")]
+    SubscriptionLive,
 }

@@ -32,3 +32,12 @@ fn init_config_rejects_fee_over_100_percent() {
     let result = common::init_config(&mut ctx, 10_001, 0, common::new_address());
     assert!(common::err_is(&result, RecurError::FeeTooHigh));
 }
+
+#[test]
+fn init_config_rejects_non_upgrade_authority() {
+    let mut ctx = common::setup();
+    let stranger = common::funded_keypair(&mut ctx);
+    let result = common::init_config_as(&mut ctx, &stranger, 200, 100_000, common::new_address());
+    assert!(common::err_is(&result, RecurError::NotUpgradeAuthority));
+    assert!(ctx.svm.get_account(&common::config_pda()).is_none());
+}
