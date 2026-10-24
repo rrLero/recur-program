@@ -72,19 +72,64 @@ fn subscribe_hook_keeps_referrer_while_active() {
 #[test]
 fn subscribe_hook_reopens_expired_membership_with_new_referrer() {
     let (mut ctx, sub) = common::configured_sub(PRICE, 720);
-    let start = common::now(&ctx);
     common::subscribe(&mut ctx, &sub, Some(sub.referrer)).unwrap();
     let created_at = common::fetch_membership(&ctx, &sub).created_at;
     let new_referrer = Pubkey::new_unique();
     let new_referrer_ata = common::token_account(&mut ctx, &sub, &new_referrer);
+    common::cancel_subscription_now(&mut ctx, &sub).unwrap();
     common::warp(&mut ctx, PERIOD + 1);
-    common::renew(&mut ctx, &sub, Some(new_referrer)).unwrap();
+    common::abandon_rail_subscription(&mut ctx, &sub).unwrap();
+    let restart = common::now(&ctx);
+    let member = sub.member.insecure_clone();
+    let ixs = [
+        common::subscribe_hook_ix(&sub, Some(new_referrer)),
+        common::rail_subscribe_ix(&ctx, &sub),
+        common::ix::collect_ix(common::collect_accounts(&sub, Some(new_referrer_ata))),
+    ];
+    common::send_many(&mut ctx, &ixs, &[&member]).unwrap();
     let membership = common::fetch_membership(&ctx, &sub);
     assert_eq!(membership.referrer, Some(new_referrer));
+    assert_eq!(membership.referral_bps, 1_000);
     assert_eq!(membership.created_at, created_at);
-    assert_eq!(membership.paid_until, start + 2 * PERIOD);
+    assert_eq!(membership.paid_until, restart + PERIOD);
     assert_eq!(common::balance(&ctx, new_referrer_ata), 2_940_000);
     assert_eq!(common::balance(&ctx, sub.transit_ata), 0);
+}
+
+#[test]
+fn subscribe_hook_cannot_swap_referrer_at_renewal() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, Some(sub.referrer)).unwrap();
+    let new_referrer = Pubkey::new_unique();
+    let new_referrer_ata = common::token_account(&mut ctx, &sub, &new_referrer);
+    common::warp(&mut ctx, PERIOD);
+    let before = common::fetch_membership(&ctx, &sub);
+    assert_eq!(before.paid_until, common::now(&ctx));
+    let result = common::renew(&mut ctx, &sub, Some(new_referrer));
+    assert!(common::err_is(&result, RecurError::AlreadyMember));
+    let after = common::fetch_membership(&ctx, &sub);
+    assert_eq!(after.referrer, Some(sub.referrer));
+    assert_eq!(after.referral_bps, before.referral_bps);
+    assert_eq!(after.paid_until, before.paid_until);
+    assert_eq!(common::balance(&ctx, new_referrer_ata), 0);
+    assert_eq!(common::balance(&ctx, sub.transit_ata), 0);
+}
+
+#[test]
+fn subscribe_hook_without_referrer_keeps_stored_referrer_on_live_subscription() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, Some(sub.referrer)).unwrap();
+    common::warp(&mut ctx, PERIOD);
+    let member = sub.member.insecure_clone();
+    let ixs = [
+        common::subscribe_hook_ix(&sub, None),
+        common::ix::collect_ix(common::collect_accounts(&sub, Some(sub.referrer_ata))),
+    ];
+    common::send_many(&mut ctx, &ixs, &[&member]).unwrap();
+    let membership = common::fetch_membership(&ctx, &sub);
+    assert_eq!(membership.referrer, Some(sub.referrer));
+    assert_eq!(membership.referral_bps, 1_000);
+    assert_eq!(common::balance(&ctx, sub.referrer_ata), 2 * 2_940_000);
 }
 
 #[test]

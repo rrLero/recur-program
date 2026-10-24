@@ -98,6 +98,14 @@ pub fn membership_pda(plan: &Pubkey, member: &Pubkey) -> Pubkey {
     .0
 }
 
+pub fn rail_subscription_pda(plan: &Pubkey, member: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(
+        &[b"subscription", plan.as_ref(), member.as_ref()],
+        &subscriptions::SUBSCRIPTIONS_ID,
+    )
+    .0
+}
+
 pub fn collect_ix(accounts: recur::accounts::Collect) -> Instruction {
     Instruction {
         program_id: recur::ID,
@@ -122,6 +130,7 @@ pub fn subscribe_hook_ix(
             plan,
             merchant: merchant_pda(&merchant_owner),
             membership: membership_pda(&plan, &member),
+            subscription: rail_subscription_pda(&plan, &member),
             system_program: solana_sdk_ids::system_program::ID,
         }
         .to_account_metas(None),

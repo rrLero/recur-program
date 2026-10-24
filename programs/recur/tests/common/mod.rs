@@ -3,7 +3,9 @@
 use anchor_lang::{AccountDeserialize, AccountSerialize, Space};
 pub mod ix;
 
-pub use ix::{config_pda, membership_pda, merchant_pda, puller_pda, transit_pda};
+pub use ix::{
+    config_pda, membership_pda, merchant_pda, puller_pda, rail_subscription_pda, transit_pda,
+};
 
 use litesvm::{types::FailedTransactionMetadata, LiteSVM};
 use litesvm_token::{
@@ -226,10 +228,6 @@ pub struct Sub {
 
 fn rail_pda(seeds: &[&[u8]]) -> Pubkey {
     Pubkey::find_program_address(seeds, &SUBSCRIPTIONS_ID).0
-}
-
-pub fn rail_subscription_pda(plan: &Pubkey, member: &Pubkey) -> Pubkey {
-    rail_pda(&[b"subscription", plan.as_ref(), member.as_ref()])
 }
 
 fn funded(ctx: &mut Ctx) -> Keypair {
@@ -746,4 +744,38 @@ pub fn anchor_err_is(result: &TxResult, code: u32) -> bool {
             TransactionError::InstructionError(_, InstructionError::Custom(c)) if c == code
         )
     )
+}
+
+pub fn abandon_rail_subscription(ctx: &mut Ctx, sub: &Sub) -> TxResult {
+    let member = sub.member.insecure_clone();
+    let close_sa = subscriptions::instructions::CloseSubscriptionAuthority {
+        user: member.pubkey(),
+        subscription_authority: sub.subscription_authority,
+        receiver: None,
+    }
+    .instruction();
+    send(ctx, close_sa, &[&member])?;
+    let mut clock = ctx.svm.get_sysvar::<solana_clock::Clock>();
+    clock.slot = clock.slot.checked_add(1).unwrap();
+    ctx.svm.set_sysvar(&clock);
+    ctx.svm.expire_blockhash();
+    let init_sa = InitSubscriptionAuthority {
+        owner: member.pubkey(),
+        subscription_authority: sub.subscription_authority,
+        token_mint: sub.mint,
+        user_ata: sub.member_ata,
+        system_program: solana_sdk_ids::system_program::ID,
+        token_program: litesvm_token::spl_token::ID,
+        payer: None,
+    }
+    .instruction();
+    send(ctx, init_sa, &[&member])?;
+    let revoke = subscriptions::instructions::RevokeAbandonedSubscription {
+        payer: member.pubkey(),
+        subscription_account: sub.subscription,
+        subscription_authority: sub.subscription_authority,
+        plan_pda: sub.plan,
+    }
+    .instruction();
+    send(ctx, revoke, &[&member])
 }
