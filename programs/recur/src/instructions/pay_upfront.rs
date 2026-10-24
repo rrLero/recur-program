@@ -4,7 +4,7 @@ use subscriptions::SUBSCRIPTIONS_ID;
 
 use crate::{
     rail, split, Config, Membership, MembershipIdentity, MembershipSource, Merchant, RecurError,
-    CONFIG_SEED, MEMBERSHIP_SEED, MERCHANT_SEED,
+    CONFIG_SEED, MEMBERSHIP_SEED, MERCHANT_SEED, PULLER_SEED,
 };
 
 #[derive(Accounts)]
@@ -47,6 +47,11 @@ pub fn handle_pay_upfront(ctx: Context<PayUpfront>, referrer: Option<Pubkey>) ->
     let plan = rail::read_plan(&accounts.plan)?;
     let now = Clock::get()?.unix_timestamp;
     rail::require_plan_active(&plan, now)?;
+    let (puller, _) = Pubkey::find_program_address(&[PULLER_SEED], &crate::ID);
+    require!(
+        !plan.data.pullers.contains(&puller),
+        RecurError::NotUpfrontPlan
+    );
     require_keys_eq!(accounts.mint.key(), plan.data.mint);
     require_keys_eq!(accounts.merchant.owner, plan.owner);
     require_keys_eq!(accounts.merchant_ata.owner, plan.owner);

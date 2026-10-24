@@ -36,4 +36,6 @@ pub enum RecurError {
     MembershipActive,
     #[msg("The rail subscription is still live")]
     SubscriptionLive,
+    #[msg("Upfront payments need a plan Recur doesn't pull from")]
+    NotUpfrontPlan,
 }

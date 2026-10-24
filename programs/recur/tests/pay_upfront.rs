@@ -139,3 +139,12 @@ fn pay_upfront_rejects_sunset_plan() {
     assert!(common::err_is(&result, RecurError::PlanNotActive));
     assert!(common::try_fetch_membership(&ctx, &sub).is_none());
 }
+
+#[test]
+fn pay_upfront_rejects_recurring_plan() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, HOURS);
+    let result = common::pay_upfront(&mut ctx, &sub, None);
+    assert!(common::err_is(&result, RecurError::NotUpfrontPlan));
+    assert_eq!(common::balance(&ctx, sub.member_ata), 1_000 * USDC);
+    assert!(common::try_fetch_membership(&ctx, &sub).is_none());
+}
