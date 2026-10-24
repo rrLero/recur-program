@@ -100,13 +100,13 @@ pub fn init_config_as(
 pub fn update_config(
     ctx: &mut Ctx,
     signer: &Keypair,
-    admin: Pubkey,
+    new_admin: Pubkey,
     fee_bps: u16,
     min_fee: u64,
     treasury: Pubkey,
     paused: bool,
 ) -> TxResult {
-    let ix = ix::update_config_ix(signer.pubkey(), admin, fee_bps, min_fee, treasury, paused);
+    let ix = ix::update_config_ix(signer.pubkey(), new_admin, fee_bps, min_fee, treasury, paused);
     send(ctx, ix, &[signer])
 }
 

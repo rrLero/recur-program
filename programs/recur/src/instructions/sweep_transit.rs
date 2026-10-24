@@ -19,7 +19,7 @@ pub struct SweepTransit<'info> {
     #[account(
         mut,
         token::mint = transit_ata.mint,
-        constraint = treasury_ata.owner == config.treasury
+        constraint = treasury_ata.owner == config.treasury @ RecurError::Unauthorized
     )]
     pub treasury_ata: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,

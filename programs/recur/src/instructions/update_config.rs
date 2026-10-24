@@ -16,7 +16,7 @@ pub struct UpdateConfig<'info> {
 
 pub fn handle_update_config(
     ctx: Context<UpdateConfig>,
-    admin: Pubkey,
+    new_admin: Pubkey,
     fee_bps: u16,
     min_fee: u64,
     treasury: Pubkey,
@@ -24,7 +24,7 @@ pub fn handle_update_config(
 ) -> Result<()> {
     require!(fee_bps <= MAX_BPS, RecurError::FeeTooHigh);
     let config = &mut ctx.accounts.config;
-    config.admin = admin;
+    config.admin = new_admin;
     config.fee_bps = fee_bps;
     config.min_fee = min_fee;
     config.treasury = treasury;

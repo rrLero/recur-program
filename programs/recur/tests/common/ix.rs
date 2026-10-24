@@ -46,7 +46,7 @@ pub fn init_config_ix(admin: Pubkey, fee_bps: u16, min_fee: u64, treasury: Pubke
 
 pub fn update_config_ix(
     signer: Pubkey,
-    admin: Pubkey,
+    new_admin: Pubkey,
     fee_bps: u16,
     min_fee: u64,
     treasury: Pubkey,
@@ -60,7 +60,7 @@ pub fn update_config_ix(
         }
         .to_account_metas(None),
         data: recur::instruction::UpdateConfig {
-            admin,
+            new_admin,
             fee_bps,
             min_fee,
             treasury,

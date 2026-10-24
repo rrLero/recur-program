@@ -31,14 +31,14 @@ pub mod recur {
 
     pub fn update_config(
         ctx: Context<UpdateConfig>,
-        admin: Pubkey,
+        new_admin: Pubkey,
         fee_bps: u16,
         min_fee: u64,
         treasury: Pubkey,
         paused: bool,
     ) -> Result<()> {
         instructions::update_config::handle_update_config(
-            ctx, admin, fee_bps, min_fee, treasury, paused,
+            ctx, new_admin, fee_bps, min_fee, treasury, paused,
         )
     }
 
