@@ -22,7 +22,7 @@ pub struct Collect<'info> {
     #[account(seeds = [TRANSIT_SEED], bump)]
     pub transit: SystemAccount<'info>,
     #[account(mut, token::mint = mint, token::authority = transit)]
-    pub transit_ata: Account<'info, TokenAccount>,
+    pub transit_ata: Box<Account<'info, TokenAccount>>,
     pub mint: Account<'info, Mint>,
     /// CHECK: owned by the rail program, deserialized and validated in the handler
     #[account(owner = SUBSCRIPTIONS_ID)]
@@ -34,7 +34,7 @@ pub struct Collect<'info> {
     #[account(owner = SUBSCRIPTIONS_ID)]
     pub subscription_authority: UncheckedAccount<'info>,
     #[account(mut, token::mint = mint)]
-    pub member_ata: Account<'info, TokenAccount>,
+    pub member_ata: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [MEMBERSHIP_SEED, plan.key().as_ref(), member_ata.owner.as_ref()],
@@ -42,11 +42,11 @@ pub struct Collect<'info> {
     )]
     pub membership: Account<'info, Membership>,
     #[account(mut, token::mint = mint)]
-    pub merchant_ata: Account<'info, TokenAccount>,
+    pub merchant_ata: Box<Account<'info, TokenAccount>>,
     #[account(mut, token::mint = mint, constraint = treasury_ata.owner == config.treasury)]
-    pub treasury_ata: Account<'info, TokenAccount>,
+    pub treasury_ata: Box<Account<'info, TokenAccount>>,
     #[account(mut, token::mint = mint)]
-    pub referrer_ata: Option<Account<'info, TokenAccount>>,
+    pub referrer_ata: Option<Box<Account<'info, TokenAccount>>>,
     /// CHECK: the rail's event authority PDA, validated by the rail
     pub event_authority: UncheckedAccount<'info>,
     /// CHECK: address-constrained to the rail program
@@ -74,7 +74,7 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
         membership.source == MembershipSource::Paid || membership.paid_until <= now,
         RecurError::PrepaidAccessActive
     );
-    membership.require_referrer_account(accounts.referrer_ata.as_ref())?;
+    membership.require_referrer_account(accounts.referrer_ata.as_deref())?;
 
     let amount = plan.data.terms.amount;
     pull_into_transit(&ctx, amount)?;
