@@ -13,6 +13,16 @@ pub use state::*;
 
 declare_id!("bY4Yyya6CMHBUfU9BfgoWK8TCjVhWtxQPurtX56dF5v");
 
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "Recur",
+    project_url: "https://www.recurme.com",
+    contacts: "email:security@recurme.com,link:https://github.com/rrLero/recur-program/security/advisories/new",
+    policy: "https://github.com/rrLero/recur-program/blob/main/SECURITY.md",
+    preferred_languages: "en",
+    source_code: "https://github.com/rrLero/recur-program"
+}
+
 #[program]
 pub mod recur {
     use super::*;

@@ -61,6 +61,21 @@ Build first: the tests load `target/deploy/recur.so`. They run on LiteSVM agains
 2. `anchor build`, then `anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/devnet.json`. `anchor build` creates the program keypair in `target/deploy/recur-keypair.json`. It is the upgrade key: keep a copy somewhere safe, never in git. A fresh keypair gives a new program id, so run `anchor keys sync` and build again before deploying your own copy.
 3. From `programs/recur`: `cargo run --example devnet_collect -- ~/.config/solana/devnet.json`. It runs `init_config` if the config is absent (only the upgrade authority can), creates a test mint, a merchant and a 1 USDC / 1 hour plan, and sends the subscribe bundle. An hour later, `cargo run --example devnet_collect -- ~/.config/solana/devnet.json --resume` runs the second `collect` and prints the balances.
 
+## Verify the deployed program
+
+The devnet program is deployed from a reproducible Docker build ([`solana-verify`](https://github.com/Ellipsis-Labs/solana-verifiable-build), image `solanafoundation/solana-verifiable-build:4.3.0`, pinned by `[workspace.metadata.cli]` in `Cargo.toml`). Anyone can rebuild it from this repository and compare hashes:
+
+```sh
+cargo install solana-verify
+solana-verify verify-from-repo https://github.com/rrLero/recur-program \
+  --url https://api.devnet.solana.com \
+  --program-id bY4Yyya6CMHBUfU9BfgoWK8TCjVhWtxQPurtX56dF5v \
+  --library-name recur \
+  --cargo-build-sbf-args="--arch v3"
+```
+
+Or compare by hand: `solana-verify build --library-name recur --cargo-build-sbf-args="--arch v3"` prints the local hash, and `solana-verify get-program-hash -u devnet bY4Yyya6CMHBUfU9BfgoWK8TCjVhWtxQPurtX56dF5v` prints the on-chain one. The program also embeds a [`security.txt`](SECURITY.md) that Solana Explorer shows.
+
 ## About this repository
 
 This is a read-only mirror of the program folder of Recur's private monorepo, synced from its main branch. Please open issues here; changes are made upstream. Recur's API and web app are not public.
