@@ -59,6 +59,7 @@ pub fn update_config_ix(
     min_fee: u64,
     treasury: Pubkey,
     paused: bool,
+    agent_puller: Pubkey,
 ) -> Instruction {
     Instruction {
         program_id: recur::ID,
@@ -73,6 +74,7 @@ pub fn update_config_ix(
             min_fee,
             treasury,
             paused,
+            agent_puller,
         }
         .data(),
     }

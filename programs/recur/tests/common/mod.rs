@@ -108,6 +108,7 @@ pub fn init_config_as(
     send(ctx, ix, &[signer])
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_config(
     ctx: &mut Ctx,
     signer: &Keypair,
@@ -116,6 +117,7 @@ pub fn update_config(
     min_fee: u64,
     treasury: Pubkey,
     paused: bool,
+    agent_puller: Pubkey,
 ) -> TxResult {
     let ix = ix::update_config_ix(
         signer.pubkey(),
@@ -124,6 +126,7 @@ pub fn update_config(
         min_fee,
         treasury,
         paused,
+        agent_puller,
     );
     send(ctx, ix, &[signer])
 }
@@ -457,7 +460,20 @@ pub fn configured_agent_sub(price: u64, period_hours: u64) -> (Ctx, Sub, Keypair
         Pubkey::default(),
         Pubkey::default(),
     ];
-    let (ctx, sub) = configured(price, period_hours, pullers, true, 10 * price);
+    let (mut ctx, sub) = configured(price, period_hours, pullers, true, 10 * price);
+    let cfg = fetch_config(&ctx);
+    let admin = ctx.admin.insecure_clone();
+    update_config(
+        &mut ctx,
+        &admin,
+        cfg.admin,
+        cfg.fee_bps,
+        cfg.min_fee,
+        cfg.treasury,
+        cfg.paused,
+        agent_puller.pubkey(),
+    )
+    .unwrap();
     (ctx, sub, agent_puller)
 }
 
@@ -849,6 +865,7 @@ pub fn set_paused(ctx: &mut Ctx) {
         cfg.min_fee,
         cfg.treasury,
         true,
+        cfg.agent_puller,
     )
     .unwrap();
 }

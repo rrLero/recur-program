@@ -40,7 +40,8 @@ pub fn handle_init_config(
         min_fee,
         treasury,
         paused: false,
-        reserved: [0; 64],
+        agent_puller: Pubkey::default(),
+        reserved: [0; 32],
     });
     Ok(())
 }

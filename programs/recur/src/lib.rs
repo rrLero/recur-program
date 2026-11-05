@@ -55,9 +55,16 @@ pub mod recur {
         min_fee: u64,
         treasury: Pubkey,
         paused: bool,
+        agent_puller: Pubkey,
     ) -> Result<()> {
         instructions::update_config::handle_update_config(
-            ctx, new_admin, fee_bps, min_fee, treasury, paused,
+            ctx,
+            new_admin,
+            fee_bps,
+            min_fee,
+            treasury,
+            paused,
+            agent_puller,
         )
     }
 

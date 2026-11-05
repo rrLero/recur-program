@@ -4,7 +4,7 @@ use anchor_spl::token::TokenAccount;
 use crate::RecurError;
 
 pub const CONFIG_SEED: &[u8] = b"config";
-pub const CONFIG_VERSION: u8 = 1;
+pub const CONFIG_VERSION: u8 = 2;
 pub const MAX_BPS: u16 = 10_000;
 
 #[account]
@@ -17,7 +17,8 @@ pub struct Config {
     pub min_fee: u64,
     pub treasury: Pubkey,
     pub paused: bool,
-    pub reserved: [u8; 64],
+    pub agent_puller: Pubkey,
+    pub reserved: [u8; 32],
 }
 
 pub const MERCHANT_SEED: &[u8] = b"merchant";
@@ -121,8 +122,11 @@ impl Membership {
 }
 
 fn is_self_referral(referrer: &Pubkey, member: &Pubkey) -> bool {
-    referrer == member
-        || [CONFIG_SEED, PULLER_SEED, TRANSIT_SEED]
-            .iter()
-            .any(|seed| *referrer == Pubkey::find_program_address(&[seed], &crate::ID).0)
+    referrer == member || is_recur_pda(referrer)
+}
+
+pub fn is_recur_pda(key: &Pubkey) -> bool {
+    [CONFIG_SEED, PULLER_SEED, TRANSIT_SEED]
+        .iter()
+        .any(|seed| *key == Pubkey::find_program_address(&[seed], &crate::ID).0)
 }

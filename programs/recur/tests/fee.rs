@@ -5,14 +5,15 @@ const USDC: u64 = 1_000_000;
 
 fn config() -> Config {
     Config {
-        version: 1,
+        version: 2,
         bump: 255,
         admin: Pubkey::default(),
         fee_bps: 200,
         min_fee: 100_000,
         treasury: Pubkey::default(),
         paused: false,
-        reserved: [0; 64],
+        agent_puller: Pubkey::default(),
+        reserved: [0; 32],
     }
 }
 

@@ -40,4 +40,6 @@ pub enum RecurError {
     NotUpfrontPlan,
     #[msg("Membership is prepaid or comped until paid_until")]
     PrepaidAccessActive,
+    #[msg("The agent puller isn't set")]
+    AgentPullerNotSet,
 }

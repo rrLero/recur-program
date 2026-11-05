@@ -11,7 +11,7 @@ fn init_config_stores_fee_and_admin() {
     let cfg = common::fetch_config(&ctx);
     assert_eq!(
         (cfg.version, cfg.fee_bps, cfg.min_fee, cfg.paused),
-        (1, 200, 100_000, false)
+        (2, 200, 100_000, false)
     );
     assert_eq!(cfg.admin, ctx.admin.pubkey());
     assert_eq!(cfg.treasury, treasury);
