@@ -304,7 +304,10 @@ fn collect_rejects_another_plans_subscription() {
     accounts.subscription = other.subscription;
     let payer = common::funded_keypair(&mut ctx);
     let result = common::send(&mut ctx, common::ix::collect_ix(accounts), &[&payer]);
-    assert!(common::anchor_err_is(&result, RAIL_SUBSCRIPTION_PLAN_MISMATCH));
+    assert!(common::anchor_err_is(
+        &result,
+        RAIL_SUBSCRIPTION_PLAN_MISMATCH
+    ));
     assert_untouched(&ctx, &sub, paid_until);
     assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
 }
@@ -328,4 +331,28 @@ fn collect_rejects_wrong_mint() {
     assert!(common::anchor_err_is(&result, 2502));
     assert_untouched(&ctx, &sub, paid_until);
     assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
+}
+
+#[test]
+fn agent_plan_activation_lands_in_transit() {
+    let (mut ctx, sub, agent) = common::configured_agent_sub(PRICE, 720);
+    let ixs = common::agent_activation_ixs(&ctx, &sub, &agent);
+    common::send_many(&mut ctx, &ixs, &[&sub.member, &agent]).unwrap();
+    assert_eq!(common::balance(&ctx, sub.transit_ata), PRICE);
+    assert_eq!(common::balance(&ctx, sub.member_ata), 9 * PRICE);
+}
+
+#[test]
+fn activation_to_a_non_destination_fails() {
+    let (mut ctx, sub, agent) = common::configured_agent_sub(PRICE, 720);
+    let mut ixs = common::agent_activation_ixs(&ctx, &sub, &agent);
+    let transfer = ixs.last_mut().unwrap();
+    for meta in transfer.accounts.iter_mut() {
+        if meta.pubkey == sub.transit_ata {
+            meta.pubkey = sub.merchant_ata;
+        }
+    }
+    assert!(common::send_many(&mut ctx, &ixs, &[&sub.member, &agent]).is_err());
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), 0);
+    assert_eq!(common::balance(&ctx, sub.member_ata), 10 * PRICE);
 }

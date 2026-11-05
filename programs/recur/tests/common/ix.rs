@@ -16,6 +16,10 @@ pub fn transit_pda() -> Pubkey {
     Pubkey::find_program_address(&[recur::TRANSIT_SEED], &recur::ID).0
 }
 
+pub fn merchant_transit_pda(owner: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[b"transit", owner.as_ref()], &recur::ID).0
+}
+
 pub fn merchant_pda(owner: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[recur::MERCHANT_SEED, owner.as_ref()], &recur::ID).0
 }

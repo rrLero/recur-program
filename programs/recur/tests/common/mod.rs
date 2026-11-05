@@ -4,7 +4,8 @@ use anchor_lang::{AccountDeserialize, AccountSerialize, Space};
 pub mod ix;
 
 pub use ix::{
-    config_pda, membership_pda, merchant_pda, puller_pda, rail_subscription_pda, transit_pda,
+    config_pda, membership_pda, merchant_pda, merchant_transit_pda, puller_pda,
+    rail_subscription_pda, transit_pda,
 };
 
 use litesvm::{types::FailedTransactionMetadata, LiteSVM};
@@ -252,6 +253,7 @@ fn create_rail_plan(
     price: u64,
     period_hours: u64,
     pullers: [Pubkey; 4],
+    destinations: [Pubkey; 4],
 ) -> Pubkey {
     let plan = rail_pda(&[b"plan", merchant.pubkey().as_ref(), &plan_id.to_le_bytes()]);
     let create_plan = CreatePlan {
@@ -272,12 +274,7 @@ fn create_rail_plan(
                 created_at: 0,
             },
             end_ts: 0,
-            destinations: [
-                merchant.pubkey(),
-                transit_pda(),
-                Pubkey::default(),
-                Pubkey::default(),
-            ],
+            destinations,
             pullers,
             metadata_uri: [0; 128],
         },
@@ -306,7 +303,17 @@ pub fn second_plan(ctx: &mut Ctx, sub: &Sub) -> Pubkey {
         price.amount,
         price.period_hours,
         pullers,
+        default_destinations(&merchant.pubkey()),
     )
+}
+
+fn default_destinations(merchant: &Pubkey) -> [Pubkey; 4] {
+    [
+        *merchant,
+        transit_pda(),
+        Pubkey::default(),
+        Pubkey::default(),
+    ]
 }
 
 pub fn new_mint(ctx: &mut Ctx) -> Pubkey {
@@ -357,7 +364,12 @@ pub fn new_member(ctx: &mut Ctx, sub: &Sub, init_authority: bool) -> Sub {
     };
     if init_authority {
         let member = other.member.insecure_clone();
-        send(ctx, init_subscription_authority_ix(&other, None), &[&member]).unwrap();
+        send(
+            ctx,
+            init_subscription_authority_ix(&other, None),
+            &[&member],
+        )
+        .unwrap();
     }
     other
 }
@@ -372,6 +384,7 @@ pub fn configured_upfront(price: u64, period_hours: u64) -> (Ctx, Sub) {
         price,
         period_hours,
         [Pubkey::default(); 4],
+        default_destinations(&sub.merchant.pubkey()),
     );
     (ctx, sub)
 }
@@ -430,6 +443,28 @@ pub fn configured_sub_with_pullers(
     period_hours: u64,
     pullers: [Pubkey; 4],
 ) -> (Ctx, Sub) {
+    configured(price, period_hours, pullers, false, 1_000 * USDC)
+}
+
+pub fn configured_agent_sub(price: u64, period_hours: u64) -> (Ctx, Sub, Keypair) {
+    let agent_puller = Keypair::new();
+    let pullers = [
+        agent_puller.pubkey(),
+        puller_pda(),
+        Pubkey::default(),
+        Pubkey::default(),
+    ];
+    let (ctx, sub) = configured(price, period_hours, pullers, true, 10 * price);
+    (ctx, sub, agent_puller)
+}
+
+fn configured(
+    price: u64,
+    period_hours: u64,
+    pullers: [Pubkey; 4],
+    agent: bool,
+    member_funds: u64,
+) -> (Ctx, Sub) {
     let mut ctx = setup();
     let treasury = new_address();
     init_config(&mut ctx, 200, 100_000, treasury).unwrap();
@@ -445,8 +480,13 @@ pub fn configured_sub_with_pullers(
     let merchant_ata = ata(&mut ctx, &mint, &merchant.pubkey());
     let treasury_ata = ata(&mut ctx, &mint, &treasury);
     let referrer_ata = ata(&mut ctx, &mint, &referrer);
-    let transit_ata = ata(&mut ctx, &mint, &transit_pda());
-    MintTo::new(&mut ctx.svm, &admin, &mint, &member_ata, 1_000 * USDC)
+    let transit_owner = if agent {
+        merchant_transit_pda(&merchant.pubkey())
+    } else {
+        transit_pda()
+    };
+    let transit_ata = ata(&mut ctx, &mint, &transit_owner);
+    MintTo::new(&mut ctx.svm, &admin, &mint, &member_ata, member_funds)
         .send()
         .unwrap();
 
@@ -467,7 +507,26 @@ pub fn configured_sub_with_pullers(
     .instruction();
     send(&mut ctx, init_sa, &[&member]).unwrap();
 
-    let plan = create_rail_plan(&mut ctx, &merchant, &mint, 1, price, period_hours, pullers);
+    let destinations = if agent {
+        [
+            transit_owner,
+            Pubkey::default(),
+            Pubkey::default(),
+            Pubkey::default(),
+        ]
+    } else {
+        default_destinations(&merchant.pubkey())
+    };
+    let plan = create_rail_plan(
+        &mut ctx,
+        &merchant,
+        &mint,
+        1,
+        price,
+        period_hours,
+        pullers,
+        destinations,
+    );
 
     let subscription = rail_subscription_pda(&plan, &member.pubkey());
 
@@ -530,6 +589,47 @@ pub fn rail_subscribe_ix_with(
             expected_subscription_authority_init_id: authority_init_id,
         },
     })
+}
+
+pub fn agent_activation_ixs(ctx: &Ctx, sub: &Sub, agent_puller: &Keypair) -> Vec<Instruction> {
+    let price = subscriptions::Plan::from_bytes(&ctx.svm.get_account(&sub.plan).unwrap().data)
+        .unwrap()
+        .data
+        .terms
+        .amount;
+    let mut ixs = Vec::new();
+    if ctx.svm.get_account(&sub.subscription_authority).is_none() {
+        ixs.push(init_subscription_authority_ix(sub, None));
+    }
+    ixs.push(rail_subscribe_ix(ctx, sub));
+    ixs.push(
+        subscriptions::instructions::TransferSubscription {
+            subscription_pda: sub.subscription,
+            plan_pda: sub.plan,
+            subscription_authority: sub.subscription_authority,
+            delegator_ata: sub.member_ata,
+            receiver_ata: sub.transit_ata,
+            caller: agent_puller.pubkey(),
+            token_mint: sub.mint,
+            token_program: litesvm_token::spl_token::ID,
+            event_authority: Pubkey::find_program_address(
+                &[b"event_authority"],
+                &subscriptions::SUBSCRIPTIONS_ID,
+            )
+            .0,
+            self_program: subscriptions::SUBSCRIPTIONS_ID,
+        }
+        .instruction(
+            subscriptions::instructions::TransferSubscriptionInstructionArgs {
+                transfer_data: subscriptions::types::TransferData {
+                    amount: price,
+                    delegator: sub.member.pubkey(),
+                    mint: sub.mint,
+                },
+            },
+        ),
+    );
+    ixs
 }
 
 pub fn collect_accounts(sub: &Sub, referrer_ata: Option<Pubkey>) -> recur::accounts::Collect {
