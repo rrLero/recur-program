@@ -245,6 +245,11 @@ pub fn ata(ctx: &mut Ctx, mint: &Pubkey, owner: &Pubkey) -> Pubkey {
         .unwrap()
 }
 
+struct PlanAccess {
+    pullers: [Pubkey; 4],
+    destinations: [Pubkey; 4],
+}
+
 fn create_rail_plan(
     ctx: &mut Ctx,
     merchant: &Keypair,
@@ -252,8 +257,7 @@ fn create_rail_plan(
     plan_id: u64,
     price: u64,
     period_hours: u64,
-    pullers: [Pubkey; 4],
-    destinations: [Pubkey; 4],
+    access: PlanAccess,
 ) -> Pubkey {
     let plan = rail_pda(&[b"plan", merchant.pubkey().as_ref(), &plan_id.to_le_bytes()]);
     let create_plan = CreatePlan {
@@ -274,8 +278,8 @@ fn create_rail_plan(
                 created_at: 0,
             },
             end_ts: 0,
-            destinations,
-            pullers,
+            destinations: access.destinations,
+            pullers: access.pullers,
             metadata_uri: [0; 128],
         },
     });
@@ -302,8 +306,10 @@ pub fn second_plan(ctx: &mut Ctx, sub: &Sub) -> Pubkey {
         3,
         price.amount,
         price.period_hours,
-        pullers,
-        default_destinations(&merchant.pubkey()),
+        PlanAccess {
+            pullers,
+            destinations: default_destinations(&merchant.pubkey()),
+        },
     )
 }
 
@@ -364,12 +370,7 @@ pub fn new_member(ctx: &mut Ctx, sub: &Sub, init_authority: bool) -> Sub {
     };
     if init_authority {
         let member = other.member.insecure_clone();
-        send(
-            ctx,
-            init_subscription_authority_ix(&other, None),
-            &[&member],
-        )
-        .unwrap();
+        send(ctx, init_subscription_authority_ix(&other, None), &[&member]).unwrap();
     }
     other
 }
@@ -383,8 +384,10 @@ pub fn configured_upfront(price: u64, period_hours: u64) -> (Ctx, Sub) {
         2,
         price,
         period_hours,
-        [Pubkey::default(); 4],
-        default_destinations(&sub.merchant.pubkey()),
+        PlanAccess {
+            pullers: [Pubkey::default(); 4],
+            destinations: default_destinations(&sub.merchant.pubkey()),
+        },
     );
     (ctx, sub)
 }
@@ -524,8 +527,10 @@ fn configured(
         1,
         price,
         period_hours,
-        pullers,
-        destinations,
+        PlanAccess {
+            pullers,
+            destinations,
+        },
     );
 
     let subscription = rail_subscription_pda(&plan, &member.pubkey());
@@ -544,7 +549,7 @@ fn configured(
         referrer_ata,
         transit_ata,
     };
-    register_merchant(&mut ctx, &sub, 1_000).unwrap();
+    register_merchant(&mut ctx, &sub, if agent { 0 } else { 1_000 }).unwrap();
     (ctx, sub)
 }
 

@@ -10,6 +10,7 @@ const PERIOD: i64 = 720 * 3600;
 const DAY: i64 = 86_400;
 const RAIL_UNAUTHORIZED: u32 = 0x82;
 const RAIL_SUBSCRIPTION_PLAN_MISMATCH: u32 = 0x1f9;
+const RAIL_RECEIVER_NOT_A_DESTINATION: u32 = 0x1fa;
 
 fn assert_untouched(ctx: &common::Ctx, sub: &common::Sub, paid_until: Option<i64>) {
     assert_eq!(common::balance(ctx, sub.transit_ata), 0);
@@ -304,10 +305,7 @@ fn collect_rejects_another_plans_subscription() {
     accounts.subscription = other.subscription;
     let payer = common::funded_keypair(&mut ctx);
     let result = common::send(&mut ctx, common::ix::collect_ix(accounts), &[&payer]);
-    assert!(common::anchor_err_is(
-        &result,
-        RAIL_SUBSCRIPTION_PLAN_MISMATCH
-    ));
+    assert!(common::anchor_err_is(&result, RAIL_SUBSCRIPTION_PLAN_MISMATCH));
     assert_untouched(&ctx, &sub, paid_until);
     assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
 }
@@ -352,7 +350,8 @@ fn activation_to_a_non_destination_fails() {
             meta.pubkey = sub.merchant_ata;
         }
     }
-    assert!(common::send_many(&mut ctx, &ixs, &[&sub.member, &agent]).is_err());
+    let result = common::send_many(&mut ctx, &ixs, &[&sub.member, &agent]);
+    assert!(common::anchor_err_is(&result, RAIL_RECEIVER_NOT_A_DESTINATION));
     assert_eq!(common::balance(&ctx, sub.merchant_ata), 0);
     assert_eq!(common::balance(&ctx, sub.member_ata), 10 * PRICE);
 }
