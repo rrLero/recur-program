@@ -1,5 +1,5 @@
 use anchor_lang::{prelude::*, solana_program::program::invoke_signed};
-use anchor_spl::token::{Mint, Token, TokenAccount};
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
 use subscriptions::{
     instructions::{TransferSubscription, TransferSubscriptionInstructionArgs},
     types::TransferData,
@@ -93,7 +93,16 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
     membership.require_referrer_account(accounts.referrer_ata.as_deref())?;
 
     let amount = plan.data.terms.amount;
+    let transit_before = accounts.transit_ata.amount;
     pull_into_transit(&ctx, amount)?;
+    let transit_after = token::accessor::amount(&accounts.transit_ata.to_account_info())?;
+    require_eq!(
+        transit_after,
+        transit_before
+            .checked_add(amount)
+            .ok_or(RecurError::MathOverflow)?,
+        RecurError::TransitShortfall
+    );
 
     let subscription = rail::read_subscription(&accounts.subscription)?;
     require_keys_eq!(

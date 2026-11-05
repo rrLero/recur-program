@@ -52,4 +52,6 @@ pub enum RecurError {
     PeriodEnded,
     #[msg("The transit doesn't hold that amount")]
     InsufficientTransit,
+    #[msg("The pull didn't raise the transit by the period's price")]
+    TransitShortfall,
 }
