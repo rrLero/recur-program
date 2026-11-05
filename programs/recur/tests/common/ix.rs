@@ -120,6 +120,14 @@ pub fn collect_ix(accounts: recur::accounts::Collect) -> Instruction {
     }
 }
 
+pub fn activate_agent_ix(accounts: recur::accounts::ActivateAgent) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: accounts.to_account_metas(None),
+        data: recur::instruction::ActivateAgent {}.data(),
+    }
+}
+
 pub fn subscribe_hook_ix(
     member: Pubkey,
     payer: Pubkey,

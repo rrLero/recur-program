@@ -373,7 +373,12 @@ pub fn new_member(ctx: &mut Ctx, sub: &Sub, init_authority: bool) -> Sub {
     };
     if init_authority {
         let member = other.member.insecure_clone();
-        send(ctx, init_subscription_authority_ix(&other, None), &[&member]).unwrap();
+        send(
+            ctx,
+            init_subscription_authority_ix(&other, None),
+            &[&member],
+        )
+        .unwrap();
     }
     other
 }
@@ -673,6 +678,41 @@ pub fn collect_accounts(sub: &Sub, referrer_ata: Option<Pubkey>) -> recur::accou
         rail_program: SUBSCRIPTIONS_ID,
         token_program: litesvm_token::spl_token::ID,
     }
+}
+
+pub fn activate_agent_accounts(
+    sub: &Sub,
+    agent_puller: Pubkey,
+    payer: Pubkey,
+) -> recur::accounts::ActivateAgent {
+    let member = sub.member.pubkey();
+    recur::accounts::ActivateAgent {
+        agent_puller,
+        payer,
+        config: config_pda(),
+        merchant: merchant_pda(&sub.merchant.pubkey()),
+        transit: merchant_transit_pda(&sub.merchant.pubkey()),
+        transit_ata: sub.transit_ata,
+        mint: sub.mint,
+        plan: sub.plan,
+        subscription: sub.subscription,
+        member,
+        membership: membership_pda(&sub.plan, &member),
+        merchant_ata: sub.merchant_ata,
+        treasury_ata: sub.treasury_ata,
+        token_program: litesvm_token::spl_token::ID,
+        system_program: solana_sdk_ids::system_program::ID,
+    }
+}
+
+pub fn activate_agent(ctx: &mut Ctx, sub: &Sub, agent_puller: &Keypair) -> TxResult {
+    let payer = funded(ctx);
+    let ix = ix::activate_agent_ix(activate_agent_accounts(
+        sub,
+        agent_puller.pubkey(),
+        payer.pubkey(),
+    ));
+    send(ctx, ix, &[&payer, agent_puller])
 }
 
 pub fn collect(ctx: &mut Ctx, sub: &Sub, referrer_ata: Option<Pubkey>) -> TxResult {

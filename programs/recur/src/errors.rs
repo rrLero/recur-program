@@ -42,4 +42,10 @@ pub enum RecurError {
     PrepaidAccessActive,
     #[msg("The agent puller isn't set")]
     AgentPullerNotSet,
+    #[msg("The plan doesn't pay only into the merchant's transit")]
+    NotAgentPlan,
+    #[msg("The rail subscription hasn't pulled this period's price")]
+    PeriodNotPulled,
+    #[msg("This period is already settled")]
+    PeriodAlreadySettled,
 }

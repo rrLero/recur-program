@@ -1,3 +1,4 @@
+pub mod activate_agent;
 pub mod close;
 pub mod collect;
 pub mod comp;
@@ -10,6 +11,7 @@ pub mod subscribe_hook;
 pub mod sweep_transit;
 pub mod update_config;
 
+pub use activate_agent::*;
 pub use close::*;
 pub use collect::*;
 pub use comp::*;

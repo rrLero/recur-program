@@ -3,6 +3,7 @@ pub mod fee;
 pub mod instructions;
 pub mod rail;
 pub mod state;
+pub mod transit;
 
 use anchor_lang::prelude::*;
 
@@ -38,6 +39,10 @@ pub mod recur {
 
     pub fn collect(ctx: Context<Collect>) -> Result<()> {
         instructions::collect::handle_collect(ctx)
+    }
+
+    pub fn activate_agent(ctx: Context<ActivateAgent>) -> Result<()> {
+        instructions::activate_agent::handle_activate_agent(ctx)
     }
 
     pub fn subscribe_hook(ctx: Context<SubscribeHook>, referrer: Option<Pubkey>) -> Result<()> {
