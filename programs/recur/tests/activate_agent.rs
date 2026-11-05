@@ -258,3 +258,115 @@ fn activates_over_an_expired_comp() {
     assert_eq!(membership.paid_until, period_start(&ctx, &sub) + PERIOD);
     assert_eq!(common::balance(&ctx, sub.transit_ata), 0);
 }
+
+const ANCHOR_CONSTRAINT_RAW: u32 = 2003;
+const ANCHOR_REQUIRE_KEYS_EQ_VIOLATED: u32 = 2502;
+
+#[test]
+fn rejects_settling_an_ended_period_after_close() {
+    let (mut ctx, sub, agent) = activated(PRICE);
+    common::activate_agent(&mut ctx, &sub, &agent).unwrap();
+    common::cancel_subscription_now(&mut ctx, &sub).unwrap();
+    common::warp(&mut ctx, PERIOD + DAY);
+    common::close(&mut ctx, &sub).unwrap();
+    let admin = ctx.admin.insecure_clone();
+    litesvm_token::MintTo::new(&mut ctx.svm, &admin, &sub.mint, &sub.transit_ata, PRICE)
+        .send()
+        .unwrap();
+    let result = common::activate_agent(&mut ctx, &sub, &agent);
+    assert!(common::err_is(&result, RecurError::PeriodEnded));
+    assert!(common::try_fetch_membership(&ctx, &sub).is_none());
+    assert_eq!(common::balance(&ctx, sub.transit_ata), PRICE);
+    assert_eq!(common::balance(&ctx, sub.treasury_ata), 200_000);
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), 9_800_000);
+}
+
+#[test]
+fn refuses_a_mint_other_than_the_plan_mint() {
+    let (mut ctx, sub, agent) = activated(PRICE);
+    let mint = common::new_mint(&mut ctx);
+    let treasury = common::fetch_config(&ctx).treasury;
+    let transit_ata = common::ata(
+        &mut ctx,
+        &mint,
+        &common::merchant_transit_pda(&sub.merchant.pubkey()),
+    );
+    let merchant_ata = common::ata(&mut ctx, &mint, &sub.merchant.pubkey());
+    let treasury_ata = common::ata(&mut ctx, &mint, &treasury);
+    let result = common::activate_agent_with(&mut ctx, &sub, &agent, |accounts| {
+        accounts.mint = mint;
+        accounts.transit_ata = transit_ata;
+        accounts.merchant_ata = merchant_ata;
+        accounts.treasury_ata = treasury_ata;
+    });
+    assert!(common::anchor_err_is(&result, ANCHOR_REQUIRE_KEYS_EQ_VIOLATED));
+    assert_nothing_paid(&ctx, &sub, PRICE);
+}
+
+#[test]
+fn refuses_a_merchant_that_does_not_own_the_plan() {
+    let (mut ctx, sub, agent) = activated(PRICE);
+    let other = common::funded_keypair(&mut ctx);
+    common::register_merchant_as(&mut ctx, &other, 0).unwrap();
+    let other_transit = common::merchant_transit_pda(&other.pubkey());
+    let transit_ata = common::ata(&mut ctx, &sub.mint, &other_transit);
+    let merchant_ata = common::ata(&mut ctx, &sub.mint, &other.pubkey());
+    common::set_plan(&mut ctx, &sub, |plan| {
+        plan.data.destinations[0] = other_transit
+    });
+    let result = common::activate_agent_with(&mut ctx, &sub, &agent, |accounts| {
+        accounts.merchant = common::merchant_pda(&other.pubkey());
+        accounts.transit = other_transit;
+        accounts.transit_ata = transit_ata;
+        accounts.merchant_ata = merchant_ata;
+    });
+    assert!(common::anchor_err_is(&result, ANCHOR_REQUIRE_KEYS_EQ_VIOLATED));
+    assert_eq!(common::balance(&ctx, merchant_ata), 0);
+    assert_nothing_paid(&ctx, &sub, PRICE);
+}
+
+#[test]
+fn refuses_a_subscription_delegated_by_someone_else() {
+    let (mut ctx, sub, agent) = activated(PRICE);
+    common::set_subscription(&mut ctx, &sub, |subscription| {
+        subscription.header.delegator = Pubkey::new_unique()
+    });
+    let result = common::activate_agent(&mut ctx, &sub, &agent);
+    assert!(common::err_is(&result, RecurError::Unauthorized));
+    assert!(common::try_fetch_membership(&ctx, &sub).is_none());
+    assert_nothing_paid(&ctx, &sub, PRICE);
+}
+
+#[test]
+fn refuses_a_subscription_to_another_plan() {
+    let (mut ctx, sub, agent) = activated(PRICE);
+    common::set_subscription(&mut ctx, &sub, |subscription| {
+        subscription.header.delegatee = Pubkey::new_unique()
+    });
+    let result = common::activate_agent(&mut ctx, &sub, &agent);
+    assert!(common::err_is(&result, RecurError::Unauthorized));
+    assert!(common::try_fetch_membership(&ctx, &sub).is_none());
+    assert_nothing_paid(&ctx, &sub, PRICE);
+}
+
+#[test]
+fn refuses_a_merchant_ata_the_merchant_does_not_own() {
+    let (mut ctx, sub, agent) = activated(PRICE);
+    let result = common::activate_agent_with(&mut ctx, &sub, &agent, |accounts| {
+        accounts.merchant_ata = sub.referrer_ata
+    });
+    assert!(common::anchor_err_is(&result, ANCHOR_CONSTRAINT_RAW));
+    assert_eq!(common::balance(&ctx, sub.referrer_ata), 0);
+    assert_nothing_paid(&ctx, &sub, PRICE);
+}
+
+#[test]
+fn refuses_a_treasury_ata_the_treasury_does_not_own() {
+    let (mut ctx, sub, agent) = activated(PRICE);
+    let result = common::activate_agent_with(&mut ctx, &sub, &agent, |accounts| {
+        accounts.treasury_ata = sub.referrer_ata
+    });
+    assert!(common::anchor_err_is(&result, ANCHOR_CONSTRAINT_RAW));
+    assert_eq!(common::balance(&ctx, sub.referrer_ata), 0);
+    assert_nothing_paid(&ctx, &sub, PRICE);
+}

@@ -96,9 +96,10 @@ pub fn handle_activate_agent(ctx: Context<ActivateAgent>) -> Result<()> {
         .current_period_start_ts
         .checked_add(rail::period_secs(&subscription.terms)?)
         .ok_or(RecurError::MathOverflow)?;
+    let now = Clock::get()?.unix_timestamp;
+    require!(now < period_end, RecurError::PeriodEnded);
 
     let membership = &accounts.membership;
-    let now = Clock::get()?.unix_timestamp;
     require!(
         membership.source == MembershipSource::Paid || membership.paid_until <= now,
         RecurError::AlreadyMember

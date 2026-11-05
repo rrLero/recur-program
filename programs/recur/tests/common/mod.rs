@@ -706,13 +706,37 @@ pub fn activate_agent_accounts(
 }
 
 pub fn activate_agent(ctx: &mut Ctx, sub: &Sub, agent_puller: &Keypair) -> TxResult {
+    activate_agent_with(ctx, sub, agent_puller, |_| {})
+}
+
+pub fn activate_agent_with(
+    ctx: &mut Ctx,
+    sub: &Sub,
+    agent_puller: &Keypair,
+    edit: impl FnOnce(&mut recur::accounts::ActivateAgent),
+) -> TxResult {
     let payer = funded(ctx);
-    let ix = ix::activate_agent_ix(activate_agent_accounts(
-        sub,
-        agent_puller.pubkey(),
-        payer.pubkey(),
-    ));
-    send(ctx, ix, &[&payer, agent_puller])
+    let mut accounts = activate_agent_accounts(sub, agent_puller.pubkey(), payer.pubkey());
+    edit(&mut accounts);
+    send(
+        ctx,
+        ix::activate_agent_ix(accounts),
+        &[&payer, agent_puller],
+    )
+}
+
+pub fn set_subscription(
+    ctx: &mut Ctx,
+    sub: &Sub,
+    edit: impl FnOnce(&mut subscriptions::SubscriptionDelegation),
+) {
+    let mut account = ctx.svm.get_account(&sub.subscription).unwrap();
+    let mut subscription =
+        subscriptions::SubscriptionDelegation::from_bytes(&account.data).unwrap();
+    edit(&mut subscription);
+    let bytes = borsh::to_vec(&subscription).unwrap();
+    account.data[..bytes.len()].copy_from_slice(&bytes);
+    ctx.svm.set_account(sub.subscription, account).unwrap();
 }
 
 pub fn collect(ctx: &mut Ctx, sub: &Sub, referrer_ata: Option<Pubkey>) -> TxResult {

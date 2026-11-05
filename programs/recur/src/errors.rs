@@ -48,4 +48,6 @@ pub enum RecurError {
     PeriodNotPulled,
     #[msg("This period is already settled")]
     PeriodAlreadySettled,
+    #[msg("The subscription period has already ended")]
+    PeriodEnded,
 }
