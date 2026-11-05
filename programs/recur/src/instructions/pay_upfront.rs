@@ -3,7 +3,7 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use subscriptions::SUBSCRIPTIONS_ID;
 
 use crate::{
-    rail, split, Config, Membership, MembershipIdentity, MembershipSource, Merchant, RecurError,
+    fee, rail, Config, Membership, MembershipIdentity, MembershipSource, Merchant, RecurError,
     CONFIG_SEED, MEMBERSHIP_SEED, MERCHANT_SEED, PULLER_SEED,
 };
 
@@ -82,7 +82,7 @@ pub fn handle_pay_upfront(ctx: Context<PayUpfront>, referrer: Option<Pubkey>) ->
         .require_referrer_account(accounts.referrer_ata.as_ref())?;
 
     let amount = plan.data.terms.amount;
-    let shares = split(
+    let shares = fee::split(
         amount,
         &accounts.config,
         &accounts.merchant,

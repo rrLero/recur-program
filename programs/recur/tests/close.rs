@@ -134,6 +134,9 @@ fn sponsored_rent_payer_is_recorded_and_refunded_on_close() {
     let rent = ctx.svm.get_account(&membership).unwrap().lamports;
     let before = ctx.svm.get_balance(&sponsor.pubkey()).unwrap();
     common::close(&mut ctx, &sub).unwrap();
-    assert_eq!(ctx.svm.get_balance(&sponsor.pubkey()).unwrap(), before + rent);
+    assert_eq!(
+        ctx.svm.get_balance(&sponsor.pubkey()).unwrap(),
+        before + rent
+    );
     assert!(ctx.svm.get_account(&membership).is_none());
 }

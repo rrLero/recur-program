@@ -299,7 +299,10 @@ fn refuses_a_mint_other_than_the_plan_mint() {
         accounts.merchant_ata = merchant_ata;
         accounts.treasury_ata = treasury_ata;
     });
-    assert!(common::anchor_err_is(&result, ANCHOR_REQUIRE_KEYS_EQ_VIOLATED));
+    assert!(common::anchor_err_is(
+        &result,
+        ANCHOR_REQUIRE_KEYS_EQ_VIOLATED
+    ));
     assert_nothing_paid(&ctx, &sub, PRICE);
 }
 
@@ -320,7 +323,10 @@ fn refuses_a_merchant_that_does_not_own_the_plan() {
         accounts.transit_ata = transit_ata;
         accounts.merchant_ata = merchant_ata;
     });
-    assert!(common::anchor_err_is(&result, ANCHOR_REQUIRE_KEYS_EQ_VIOLATED));
+    assert!(common::anchor_err_is(
+        &result,
+        ANCHOR_REQUIRE_KEYS_EQ_VIOLATED
+    ));
     assert_eq!(common::balance(&ctx, merchant_ata), 0);
     assert_nothing_paid(&ctx, &sub, PRICE);
 }

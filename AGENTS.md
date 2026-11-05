@@ -46,7 +46,8 @@ programs/recur/
   src/lib.rs              declare_id! and thin #[program] handlers
   src/state.rs            accounts and PDA seeds
   src/errors.rs           RecurError
-  src/fee.rs              fee_for, bps_of, split
+  src/fee.rs              fee_for, bps_of, split, per_call_split
+  src/transit.rs          pays a fee/referral/merchant split out of a transit
   src/rail.rs             reads rail plans and subscriptions
   src/instructions/       one file per instruction: Accounts struct + handle_<name>
   tests/common/mod.rs     LiteSVM setup, rail plan + subscription fixtures
@@ -63,6 +64,7 @@ PDA seeds:
 | `Config` | `["config"]` |
 | puller | `["puller"]` |
 | transit | `["transit"]` |
+| merchant transit | `["transit", merchant_owner]` |
 | `Merchant` | `["merchant", owner]` |
 | `Membership` | `["membership", plan, member]` |
 | rail Subscription Authority | `["SubscriptionAuthority", member, mint]` (rail program) |
@@ -82,7 +84,7 @@ A failing tool names the rule number. Fix the code, never the rule.
 | 5 | Every instruction has a success test and a test per failure path | reviewer |
 | 6 | Every account has `version` and `reserved` padding; new fields take bytes from `reserved` and bump `version` | reviewer |
 | 7 | Access never follows the rail's "active": it follows `paid_until`, advanced by a successful `collect` or `pay_upfront`, or set by `grant_comp` | reviewer |
-| 8 | The transit balance ends every instruction at 0 | tests (`collect.rs`) |
+| 8 | The global transit ends every instruction at 0; a merchant transit ends `activate_agent`, `split` and `collect` at the balance it held before the pull being split (it may hold claims awaiting `split`) | tests (`collect.rs`, `activate_agent.rs`, `split.rs`) |
 | 9 | Never hand-edit `target/`, the rail fixture or `@repo/solana-client/src/generated` | guard hook |
 | 10 | No comments except Anchor's `/// CHECK:` | `pnpm lint:comments` |
 | 11 | Permissionless instructions constrain every payout account (plan owner, `config.treasury`, `membership.referrer`); nothing a caller passes decides where money goes | reviewer |

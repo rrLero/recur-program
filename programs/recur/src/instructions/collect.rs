@@ -1,5 +1,5 @@
 use anchor_lang::{prelude::*, solana_program::program::invoke_signed};
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::token::{Mint, Token, TokenAccount};
 use subscriptions::{
     instructions::{TransferSubscription, TransferSubscriptionInstructionArgs},
     types::TransferData,
@@ -7,8 +7,10 @@ use subscriptions::{
 };
 
 use crate::{
-    rail, split, Config, Membership, MembershipSource, Merchant, RecurError, CONFIG_SEED,
-    MEMBERSHIP_SEED, MERCHANT_SEED, PULLER_SEED, TRANSIT_SEED,
+    fee, rail,
+    transit::{pay_out_split, TransitPayout},
+    Config, Membership, MembershipSource, Merchant, RecurError, CONFIG_SEED, MEMBERSHIP_SEED,
+    MERCHANT_SEED, PULLER_SEED, TRANSIT_SEED,
 };
 
 #[derive(Accounts)]
@@ -19,7 +21,6 @@ pub struct Collect<'info> {
     pub merchant: Account<'info, Merchant>,
     #[account(seeds = [PULLER_SEED], bump)]
     pub puller: SystemAccount<'info>,
-    #[account(seeds = [TRANSIT_SEED], bump)]
     pub transit: SystemAccount<'info>,
     #[account(mut, token::mint = mint, token::authority = transit)]
     pub transit_ata: Box<Account<'info, TokenAccount>>,
@@ -67,6 +68,21 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
     require_keys_eq!(accounts.mint.key(), plan.data.mint);
     require_keys_eq!(accounts.merchant.owner, plan.owner);
     require_keys_eq!(accounts.merchant_ata.owner, plan.owner);
+    let transit_key = accounts.transit.key();
+    require!(
+        plan.data.destinations.contains(&transit_key),
+        RecurError::Unauthorized
+    );
+    let (global_transit, global_bump) = Pubkey::find_program_address(&[TRANSIT_SEED], &crate::ID);
+    let is_global_transit = transit_key == global_transit;
+    let transit_bump = if is_global_transit {
+        [global_bump]
+    } else {
+        let (merchant_transit, merchant_bump) =
+            Pubkey::find_program_address(&[TRANSIT_SEED, plan.owner.as_ref()], &crate::ID);
+        require_keys_eq!(transit_key, merchant_transit, RecurError::Unauthorized);
+        [merchant_bump]
+    };
 
     let membership = &accounts.membership;
     let now = Clock::get()?.unix_timestamp;
@@ -94,7 +110,7 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
         .current_period_start_ts
         .checked_add(rail::period_secs(&subscription.terms)?)
         .ok_or(RecurError::MathOverflow)?;
-    let shares = split(
+    let shares = fee::split(
         amount,
         &accounts.config,
         &accounts.merchant,
@@ -102,11 +118,23 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
         now,
     )?;
 
-    pay_out(&ctx, &accounts.treasury_ata, shares.fee)?;
-    if let Some(referrer_ata) = &accounts.referrer_ata {
-        pay_out(&ctx, referrer_ata, shares.referral)?;
-    }
-    pay_out(&ctx, &accounts.merchant_ata, shares.merchant)?;
+    let transit_signer_seeds: &[&[u8]] = if is_global_transit {
+        &[TRANSIT_SEED, &transit_bump]
+    } else {
+        &[TRANSIT_SEED, plan.owner.as_ref(), &transit_bump]
+    };
+    pay_out_split(
+        &TransitPayout {
+            token_program: &accounts.token_program,
+            transit: accounts.transit.to_account_info(),
+            transit_signer_seeds,
+            transit_ata: &accounts.transit_ata,
+            treasury_ata: &accounts.treasury_ata,
+            merchant_ata: &accounts.merchant_ata,
+            referrer_ata: accounts.referrer_ata.as_deref(),
+        },
+        &shares,
+    )?;
 
     let membership = &mut ctx.accounts.membership;
     membership.paid_until = membership.paid_until.max(period_end);
@@ -152,27 +180,4 @@ fn pull_into_transit(ctx: &Context<Collect>, amount: u64) -> Result<()> {
         &[&[PULLER_SEED, &[ctx.bumps.puller]]],
     )?;
     Ok(())
-}
-
-fn pay_out<'info>(
-    ctx: &Context<'_, Collect<'info>>,
-    to: &Account<'info, TokenAccount>,
-    amount: u64,
-) -> Result<()> {
-    if amount == 0 {
-        return Ok(());
-    }
-    let accounts = &ctx.accounts;
-    token::transfer(
-        CpiContext::new_with_signer(
-            accounts.token_program.key(),
-            Transfer {
-                from: accounts.transit_ata.to_account_info(),
-                to: to.to_account_info(),
-                authority: accounts.transit.to_account_info(),
-            },
-            &[&[TRANSIT_SEED, &[ctx.bumps.transit]]],
-        ),
-        amount,
-    )
 }

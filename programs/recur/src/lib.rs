@@ -8,7 +8,7 @@ pub mod transit;
 use anchor_lang::prelude::*;
 
 pub use errors::*;
-pub use fee::*;
+pub use fee::{bps_of, effective_fee_bps, fee_for, per_call_split, Shares};
 pub use instructions::*;
 pub use state::*;
 
@@ -43,6 +43,10 @@ pub mod recur {
 
     pub fn activate_agent(ctx: Context<ActivateAgent>) -> Result<()> {
         instructions::activate_agent::handle_activate_agent(ctx)
+    }
+
+    pub fn split(ctx: Context<Split>, amount: u64) -> Result<()> {
+        instructions::split::handle_split(ctx, amount)
     }
 
     pub fn subscribe_hook(ctx: Context<SubscribeHook>, referrer: Option<Pubkey>) -> Result<()> {

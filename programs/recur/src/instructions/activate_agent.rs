@@ -3,7 +3,7 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 use subscriptions::{Plan, SUBSCRIPTIONS_ID};
 
 use crate::{
-    rail, split,
+    fee, rail,
     transit::{pay_out_split, TransitPayout},
     Config, Membership, MembershipIdentity, MembershipSource, Merchant, RecurError, CONFIG_SEED,
     MEMBERSHIP_SEED, MERCHANT_SEED, PULLER_SEED, TRANSIT_SEED,
@@ -109,7 +109,7 @@ pub fn handle_activate_agent(ctx: Context<ActivateAgent>) -> Result<()> {
         RecurError::PeriodAlreadySettled
     );
 
-    let shares = split(amount, &accounts.config, &accounts.merchant, 0, now)?;
+    let shares = fee::split(amount, &accounts.config, &accounts.merchant, 0, now)?;
     let merchant_owner = accounts.merchant.owner;
     let transit_bump = [ctx.bumps.transit];
     let transit_signer_seeds: &[&[u8]] = &[TRANSIT_SEED, merchant_owner.as_ref(), &transit_bump];

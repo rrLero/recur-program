@@ -128,6 +128,14 @@ pub fn activate_agent_ix(accounts: recur::accounts::ActivateAgent) -> Instructio
     }
 }
 
+pub fn split_ix(accounts: recur::accounts::Split, amount: u64) -> Instruction {
+    Instruction {
+        program_id: recur::ID,
+        accounts: accounts.to_account_metas(None),
+        data: recur::instruction::Split { amount }.data(),
+    }
+}
+
 pub fn subscribe_hook_ix(
     member: Pubkey,
     payer: Pubkey,

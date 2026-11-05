@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-use crate::{RecurError, Split};
+use crate::{RecurError, Shares};
 
 pub struct TransitPayout<'a, 'info> {
     pub token_program: &'a Program<'info, Token>,
@@ -13,7 +13,7 @@ pub struct TransitPayout<'a, 'info> {
     pub referrer_ata: Option<&'a Account<'info, TokenAccount>>,
 }
 
-pub fn pay_out_split(payout: &TransitPayout, shares: &Split) -> Result<()> {
+pub fn pay_out_split(payout: &TransitPayout, shares: &Shares) -> Result<()> {
     pay_out(payout, payout.treasury_ata, shares.fee)?;
     match payout.referrer_ata {
         Some(referrer_ata) => pay_out(payout, referrer_ata, shares.referral)?,

@@ -79,11 +79,40 @@ fn update_config_can_hand_admin_over() {
     let (mut ctx, treasury) = initialised();
     let old = ctx.admin.insecure_clone();
     let new = common::funded_keypair(&mut ctx);
-    common::update_config(&mut ctx, &old, new.pubkey(), 200, 100_000, treasury, false, solana_pubkey::Pubkey::default()).unwrap();
+    common::update_config(
+        &mut ctx,
+        &old,
+        new.pubkey(),
+        200,
+        100_000,
+        treasury,
+        false,
+        solana_pubkey::Pubkey::default(),
+    )
+    .unwrap();
     ctx.svm.expire_blockhash();
-    common::update_config(&mut ctx, &new, new.pubkey(), 300, 100_000, treasury, false, solana_pubkey::Pubkey::default()).unwrap();
+    common::update_config(
+        &mut ctx,
+        &new,
+        new.pubkey(),
+        300,
+        100_000,
+        treasury,
+        false,
+        solana_pubkey::Pubkey::default(),
+    )
+    .unwrap();
     ctx.svm.expire_blockhash();
-    let result = common::update_config(&mut ctx, &old, old.pubkey(), 400, 100_000, treasury, false, solana_pubkey::Pubkey::default());
+    let result = common::update_config(
+        &mut ctx,
+        &old,
+        old.pubkey(),
+        400,
+        100_000,
+        treasury,
+        false,
+        solana_pubkey::Pubkey::default(),
+    );
     assert!(common::err_is(&result, RecurError::Unauthorized));
     assert_eq!(common::fetch_config(&ctx).fee_bps, 300);
 }

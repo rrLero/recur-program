@@ -50,4 +50,6 @@ pub enum RecurError {
     PeriodAlreadySettled,
     #[msg("The subscription period has already ended")]
     PeriodEnded,
+    #[msg("The transit doesn't hold that amount")]
+    InsufficientTransit,
 }

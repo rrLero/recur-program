@@ -1,5 +1,5 @@
 use anchor_lang::prelude::Pubkey;
-use recur::{split, Config, Merchant};
+use recur::{fee::split, per_call_split, Config, Merchant};
 
 const USDC: u64 = 1_000_000;
 
@@ -63,5 +63,31 @@ fn split_parts_sum_to_amount() {
             let s = split(amount, &config(), &merchant(None, 0), referral_bps, 10).unwrap();
             assert_eq!(s.fee + s.referral + s.merchant, amount);
         }
+    }
+}
+
+#[test]
+fn per_call_split_charges_bps_without_the_minimum() {
+    let s = per_call_split(USDC, &config(), &merchant(None, 0), 10).unwrap();
+    assert_eq!((s.fee, s.referral, s.merchant), (20_000, 0, 980_000));
+}
+
+#[test]
+fn per_call_split_uses_override() {
+    let s = per_call_split(USDC, &config(), &merchant(Some(100), 0), 10).unwrap();
+    assert_eq!((s.fee, s.merchant), (10_000, 990_000));
+}
+
+#[test]
+fn per_call_split_is_fee_free_inside_window() {
+    let s = per_call_split(USDC, &config(), &merchant(None, 11), 10).unwrap();
+    assert_eq!((s.fee, s.merchant), (0, USDC));
+}
+
+#[test]
+fn per_call_split_parts_sum_to_amount() {
+    for amount in [0, 1, 49, 100_000, u64::MAX] {
+        let s = per_call_split(amount, &config(), &merchant(None, 0), 10).unwrap();
+        assert_eq!(s.fee + s.merchant, amount);
     }
 }

@@ -680,6 +680,50 @@ pub fn collect_accounts(sub: &Sub, referrer_ata: Option<Pubkey>) -> recur::accou
     }
 }
 
+pub fn agent_collect_accounts(sub: &Sub) -> recur::accounts::Collect {
+    recur::accounts::Collect {
+        transit: merchant_transit_pda(&sub.merchant.pubkey()),
+        ..collect_accounts(sub, None)
+    }
+}
+
+pub fn split_accounts(sub: &Sub, agent_puller: Pubkey) -> recur::accounts::Split {
+    let owner = sub.merchant.pubkey();
+    recur::accounts::Split {
+        agent_puller,
+        config: config_pda(),
+        merchant: merchant_pda(&owner),
+        transit: merchant_transit_pda(&owner),
+        transit_ata: sub.transit_ata,
+        merchant_ata: sub.merchant_ata,
+        treasury_ata: sub.treasury_ata,
+        mint: sub.mint,
+        token_program: litesvm_token::spl_token::ID,
+    }
+}
+
+pub fn split_with(
+    ctx: &mut Ctx,
+    signer: &Keypair,
+    accounts: recur::accounts::Split,
+    amount: u64,
+) -> TxResult {
+    let payer = funded(ctx);
+    send(ctx, ix::split_ix(accounts, amount), &[&payer, signer])
+}
+
+pub fn split(ctx: &mut Ctx, sub: &Sub, agent_puller: &Keypair, amount: u64) -> TxResult {
+    let accounts = split_accounts(sub, agent_puller.pubkey());
+    split_with(ctx, agent_puller, accounts, amount)
+}
+
+pub fn fund_transit(ctx: &mut Ctx, sub: &Sub, amount: u64) {
+    let admin = ctx.admin.insecure_clone();
+    MintTo::new(&mut ctx.svm, &admin, &sub.mint, &sub.transit_ata, amount)
+        .send()
+        .unwrap();
+}
+
 pub fn activate_agent_accounts(
     sub: &Sub,
     agent_puller: Pubkey,

@@ -18,7 +18,7 @@ pub fn effective_fee_bps(config: &Config, merchant: &Merchant) -> u16 {
     merchant.fee_bps_override.unwrap_or(config.fee_bps)
 }
 
-pub struct Split {
+pub struct Shares {
     pub fee: u64,
     pub referral: u64,
     pub merchant: u64,
@@ -30,7 +30,7 @@ pub fn split(
     merchant: &Merchant,
     referral_bps: u16,
     now: i64,
-) -> Result<Split> {
+) -> Result<Shares> {
     let fee = if now < merchant.fee_free_until {
         0
     } else {
@@ -41,9 +41,28 @@ pub fn split(
     let merchant = after_fee
         .checked_sub(referral)
         .ok_or(RecurError::MathOverflow)?;
-    Ok(Split {
+    Ok(Shares {
         fee,
         referral,
+        merchant,
+    })
+}
+
+pub fn per_call_split(
+    amount: u64,
+    config: &Config,
+    merchant: &Merchant,
+    now: i64,
+) -> Result<Shares> {
+    let fee = if now < merchant.fee_free_until {
+        0
+    } else {
+        bps_of(amount, effective_fee_bps(config, merchant))?
+    };
+    let merchant = amount.checked_sub(fee).ok_or(RecurError::MathOverflow)?;
+    Ok(Shares {
+        fee,
+        referral: 0,
         merchant,
     })
 }

@@ -305,7 +305,10 @@ fn collect_rejects_another_plans_subscription() {
     accounts.subscription = other.subscription;
     let payer = common::funded_keypair(&mut ctx);
     let result = common::send(&mut ctx, common::ix::collect_ix(accounts), &[&payer]);
-    assert!(common::anchor_err_is(&result, RAIL_SUBSCRIPTION_PLAN_MISMATCH));
+    assert!(common::anchor_err_is(
+        &result,
+        RAIL_SUBSCRIPTION_PLAN_MISMATCH
+    ));
     assert_untouched(&ctx, &sub, paid_until);
     assert_eq!(common::balance(&ctx, sub.member_ata), 970 * USDC);
 }
@@ -351,7 +354,91 @@ fn activation_to_a_non_destination_fails() {
         }
     }
     let result = common::send_many(&mut ctx, &ixs, &[&sub.member, &agent]);
-    assert!(common::anchor_err_is(&result, RAIL_RECEIVER_NOT_A_DESTINATION));
+    assert!(common::anchor_err_is(
+        &result,
+        RAIL_RECEIVER_NOT_A_DESTINATION
+    ));
     assert_eq!(common::balance(&ctx, sub.merchant_ata), 0);
     assert_eq!(common::balance(&ctx, sub.member_ata), 10 * PRICE);
+}
+
+fn activated_agent() -> (common::Ctx, common::Sub) {
+    let (mut ctx, sub, agent) = common::configured_agent_sub(PRICE, 720);
+    let ixs = common::agent_activation_ixs(&ctx, &sub, &agent);
+    common::send_many(&mut ctx, &ixs, &[&sub.member, &agent]).unwrap();
+    common::activate_agent(&mut ctx, &sub, &agent).unwrap();
+    (ctx, sub)
+}
+
+fn collect_as(ctx: &mut common::Ctx, accounts: recur::accounts::Collect) -> common::TxResult {
+    let payer = common::funded_keypair(ctx);
+    common::send(ctx, common::ix::collect_ix(accounts), &[&payer])
+}
+
+#[test]
+fn renews_an_agent_membership() {
+    let (mut ctx, sub) = activated_agent();
+    let held = 3 * USDC;
+    common::fund_transit(&mut ctx, &sub, held);
+    let paid_until = common::paid_until(&ctx, &sub).unwrap();
+    common::warp(&mut ctx, PERIOD);
+    collect_as(&mut ctx, common::agent_collect_accounts(&sub)).unwrap();
+    assert_eq!(common::paid_until(&ctx, &sub), Some(paid_until + PERIOD));
+    assert_eq!(common::balance(&ctx, sub.transit_ata), held);
+    assert_eq!(common::balance(&ctx, sub.treasury_ata), 2 * 600_000);
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), 2 * 29_400_000);
+    assert_eq!(common::balance(&ctx, sub.member_ata), 8 * PRICE);
+}
+
+#[test]
+fn rejects_a_transit_that_is_not_a_destination() {
+    let (mut ctx, sub) = activated_agent();
+    let paid_until = common::paid_until(&ctx, &sub);
+    common::warp(&mut ctx, PERIOD);
+    let global_transit_ata = common::token_account(&mut ctx, &sub, &common::transit_pda());
+    let accounts = recur::accounts::Collect {
+        transit_ata: global_transit_ata,
+        ..common::collect_accounts(&sub, None)
+    };
+    let result = collect_as(&mut ctx, accounts);
+    assert!(common::err_is(&result, RecurError::Unauthorized));
+    assert_eq!(common::paid_until(&ctx, &sub), paid_until);
+    assert_eq!(common::balance(&ctx, global_transit_ata), 0);
+    assert_eq!(common::balance(&ctx, sub.member_ata), 9 * PRICE);
+}
+
+#[test]
+fn rejects_a_transit_that_is_not_a_recur_pda() {
+    let (mut ctx, sub) = activated_agent();
+    let paid_until = common::paid_until(&ctx, &sub);
+    common::warp(&mut ctx, PERIOD);
+    let stranger = Pubkey::new_unique();
+    let stranger_ata = common::token_account(&mut ctx, &sub, &stranger);
+    let accounts = recur::accounts::Collect {
+        transit: stranger,
+        transit_ata: stranger_ata,
+        ..common::collect_accounts(&sub, None)
+    };
+    let result = collect_as(&mut ctx, accounts);
+    assert!(common::err_is(&result, RecurError::Unauthorized));
+    assert_eq!(common::paid_until(&ctx, &sub), paid_until);
+    assert_eq!(common::balance(&ctx, sub.member_ata), 9 * PRICE);
+}
+
+#[test]
+fn rejects_the_merchant_transit_on_a_community_plan() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    let paid_until = common::paid_until(&ctx, &sub);
+    common::warp(&mut ctx, PERIOD);
+    let merchant_transit = common::merchant_transit_pda(&sub.merchant.pubkey());
+    let merchant_transit_ata = common::token_account(&mut ctx, &sub, &merchant_transit);
+    let accounts = recur::accounts::Collect {
+        transit: merchant_transit,
+        transit_ata: merchant_transit_ata,
+        ..common::collect_accounts(&sub, None)
+    };
+    let result = collect_as(&mut ctx, accounts);
+    assert!(common::err_is(&result, RecurError::Unauthorized));
+    assert_untouched(&ctx, &sub, paid_until);
 }
