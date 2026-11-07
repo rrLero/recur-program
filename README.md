@@ -20,6 +20,8 @@ It is built on the Solana Foundation [Subscriptions program](https://github.com/
 | `set_merchant_terms` | Per-merchant fee override and fee-free period |
 | `subscribe_hook` | Records the membership, in the same transaction as the rail's subscribe (optional referrer) |
 | `collect` | Collects a due period through the rail and splits the fee |
+| `activate_agent` | Opens an AI agent's membership after its first pull lands in the merchant's transit account, and splits that period (signed by the config's `agent_puller`) |
+| `split` | Pays an amount out of a merchant's transit account to the merchant and the treasury (signed by the `agent_puller`) |
 | `pay_upfront` | Pays for a membership upfront |
 | `grant_comp`, `revoke_comp` | Free memberships granted by the merchant |
 | `refund` | Merchant refund, optionally shortening paid time |
@@ -34,7 +36,8 @@ It is built on the Solana Foundation [Subscriptions program](https://github.com/
 - **Access follows `paid_until`,** set by `collect`, `pay_upfront` or `grant_comp`, never the rail's "active" flag. Grace is computed off-chain from `paid_until`.
 - **Comps.** The plan owner grants free time with `grant_comp` (until a date) and ends it with `revoke_comp`. `collect` refuses while comp or upfront time is still running (`PrepaidAccessActive`), so a member isn't charged for time they already have.
 - **Refunds.** The merchant signs `refund` to send USDC from their own token account back to the member, optionally shortening `paid_until`. It can never extend it.
-- **Pause.** While `config.paused`, the money-moving instructions (`collect`, `pay_upfront`, `subscribe_hook`) refuse; refunds, comps and housekeeping keep working.
+- **Agents.** An AI agent subscribes to a merchant's API over HTTP 402 (MPP `draft-solana-subscription-00`): it signs the rail's `subscribe` and the first `transfer_subscription`, which pulls one period into the merchant's transit account with the `agent_puller` as caller. `activate_agent` then opens its `Membership` and splits that payment. Renewals use `collect` like any other plan, with the transit as the destination.
+- **Pause.** While `config.paused`, the money-moving instructions (`collect`, `pay_upfront`, `subscribe_hook`, `activate_agent`, `split`) refuse; refunds, comps and housekeeping keep working.
 
 Recur's API (private) builds these transactions, pays their network fees as the fee payer and runs the keeper. The member signs in their own wallet and needs no SOL.
 
