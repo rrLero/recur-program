@@ -86,7 +86,10 @@ pub fn handle_pay_upfront(ctx: Context<PayUpfront>, referrer: Option<Pubkey>) ->
         amount,
         &accounts.config,
         &accounts.merchant,
-        accounts.membership.referral_bps,
+        accounts
+            .membership
+            .referral_bps
+            .min(accounts.merchant.referral_bps),
         now,
     )?;
     pay(accounts, &accounts.treasury_ata, shares.fee)?;

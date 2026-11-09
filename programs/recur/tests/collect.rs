@@ -31,6 +31,27 @@ fn collect_splits_merchant_treasury_referrer() {
 }
 
 #[test]
+fn collect_pays_the_lowered_merchant_referral_rate_to_a_locked_referrer() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, Some(sub.referrer)).unwrap();
+    common::update_merchant(&mut ctx, &sub.merchant, sub.merchant.pubkey(), 500).unwrap();
+    common::warp(&mut ctx, PERIOD);
+    common::collect(&mut ctx, &sub, Some(sub.referrer_ata)).unwrap();
+    assert_eq!(common::balance(&ctx, sub.referrer_ata), 2_940_000 + 1_470_000);
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), 26_460_000 + 27_930_000);
+}
+
+#[test]
+fn collect_keeps_the_locked_referral_rate_when_the_merchant_raises_it() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, Some(sub.referrer)).unwrap();
+    common::update_merchant(&mut ctx, &sub.merchant, sub.merchant.pubkey(), 2_000).unwrap();
+    common::warp(&mut ctx, PERIOD);
+    common::collect(&mut ctx, &sub, Some(sub.referrer_ata)).unwrap();
+    assert_eq!(common::balance(&ctx, sub.referrer_ata), 2 * 2_940_000);
+}
+
+#[test]
 fn collect_without_referrer_pays_merchant_the_rest() {
     let (mut ctx, sub) = common::configured_sub(PRICE, 720);
     common::subscribe(&mut ctx, &sub, None).unwrap();

@@ -123,7 +123,7 @@ pub fn handle_collect(ctx: Context<Collect>) -> Result<()> {
         amount,
         &accounts.config,
         &accounts.merchant,
-        membership.referral_bps,
+        membership.referral_bps.min(accounts.merchant.referral_bps),
         now,
     )?;
 

@@ -71,6 +71,16 @@ fn pay_upfront_requires_the_referrer_account() {
 }
 
 #[test]
+fn pay_upfront_renewal_pays_the_lowered_merchant_referral_rate() {
+    let (mut ctx, sub) = common::configured_upfront(PRICE, HOURS);
+    common::pay_upfront(&mut ctx, &sub, Some(sub.referrer)).unwrap();
+    common::update_merchant(&mut ctx, &sub.merchant, sub.merchant.pubkey(), 500).unwrap();
+    let accounts = common::pay_upfront_accounts(&sub, Some(sub.referrer_ata));
+    common::pay_upfront_with(&mut ctx, &sub, accounts, None).unwrap();
+    assert_eq!(common::balance(&ctx, sub.referrer_ata), 29_400_000 + 14_700_000);
+}
+
+#[test]
 fn pay_upfront_keeps_referrer_while_active() {
     let (mut ctx, sub) = common::configured_upfront(PRICE, HOURS);
     common::pay_upfront(&mut ctx, &sub, Some(sub.referrer)).unwrap();
