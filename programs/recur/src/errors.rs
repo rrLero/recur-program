@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum RecurError {
-    #[msg("Fee basis points can't exceed 10000")]
+    #[msg("The fee is above the program's cap")]
     FeeTooHigh,
     #[msg("Recur is paused")]
     Paused,

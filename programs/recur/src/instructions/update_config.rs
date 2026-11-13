@@ -1,6 +1,8 @@
 use anchor_lang::prelude::*;
 
-use crate::{is_recur_pda, Config, RecurError, CONFIG_SEED, CONFIG_VERSION, MAX_BPS};
+use crate::{
+    is_recur_pda, Config, RecurError, CONFIG_SEED, CONFIG_VERSION, MAX_FEE_BPS, MAX_MIN_FEE,
+};
 
 #[derive(Accounts)]
 pub struct UpdateConfig<'info> {
@@ -23,7 +25,8 @@ pub fn handle_update_config(
     paused: bool,
     agent_puller: Pubkey,
 ) -> Result<()> {
-    require!(fee_bps <= MAX_BPS, RecurError::FeeTooHigh);
+    require!(fee_bps <= MAX_FEE_BPS, RecurError::FeeTooHigh);
+    require!(min_fee <= MAX_MIN_FEE, RecurError::FeeTooHigh);
     require!(!is_recur_pda(&agent_puller), RecurError::Unauthorized);
     let config = &mut ctx.accounts.config;
     config.admin = new_admin;

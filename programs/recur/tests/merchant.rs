@@ -1,6 +1,6 @@
 mod common;
 
-use recur::RecurError;
+use recur::{RecurError, MAX_FEE_BPS};
 use solana_signer::Signer;
 
 #[test]
@@ -81,10 +81,33 @@ fn set_merchant_terms_rejects_non_admin() {
 }
 
 #[test]
-fn set_merchant_terms_rejects_override_over_100_percent() {
+fn set_merchant_terms_accepts_override_at_the_cap() {
     let (mut ctx, sub) = common::configured_sub(30 * common::USDC, 720);
     let admin = ctx.admin.insecure_clone();
-    let result =
-        common::set_merchant_terms(&mut ctx, &admin, sub.merchant.pubkey(), Some(10_001), 0);
+    common::set_merchant_terms(
+        &mut ctx,
+        &admin,
+        sub.merchant.pubkey(),
+        Some(MAX_FEE_BPS),
+        0,
+    )
+    .unwrap();
+    let merchant = common::fetch_merchant(&ctx, sub.merchant.pubkey());
+    assert_eq!(merchant.fee_bps_override, Some(MAX_FEE_BPS));
+}
+
+#[test]
+fn set_merchant_terms_rejects_override_over_the_cap() {
+    let (mut ctx, sub) = common::configured_sub(30 * common::USDC, 720);
+    let admin = ctx.admin.insecure_clone();
+    let result = common::set_merchant_terms(
+        &mut ctx,
+        &admin,
+        sub.merchant.pubkey(),
+        Some(MAX_FEE_BPS + 1),
+        0,
+    );
     assert!(common::err_is(&result, RecurError::FeeTooHigh));
+    let merchant = common::fetch_merchant(&ctx, sub.merchant.pubkey());
+    assert_eq!(merchant.fee_bps_override, None);
 }

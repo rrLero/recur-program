@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::program::Recur;
-use crate::{Config, RecurError, CONFIG_SEED, CONFIG_VERSION, MAX_BPS};
+use crate::{Config, RecurError, CONFIG_SEED, CONFIG_VERSION, MAX_FEE_BPS, MAX_MIN_FEE};
 
 #[derive(Accounts)]
 pub struct InitConfig<'info> {
@@ -31,7 +31,8 @@ pub fn handle_init_config(
     min_fee: u64,
     treasury: Pubkey,
 ) -> Result<()> {
-    require!(fee_bps <= MAX_BPS, RecurError::FeeTooHigh);
+    require!(fee_bps <= MAX_FEE_BPS, RecurError::FeeTooHigh);
+    require!(min_fee <= MAX_MIN_FEE, RecurError::FeeTooHigh);
     ctx.accounts.config.set_inner(Config {
         version: CONFIG_VERSION,
         bump: ctx.bumps.config,

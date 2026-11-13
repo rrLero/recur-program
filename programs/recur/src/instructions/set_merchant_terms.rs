@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{Config, Merchant, RecurError, CONFIG_SEED, MAX_BPS, MERCHANT_SEED};
+use crate::{Config, Merchant, RecurError, CONFIG_SEED, MAX_FEE_BPS, MERCHANT_SEED};
 
 #[derive(Accounts)]
 pub struct SetMerchantTerms<'info> {
@@ -25,7 +25,7 @@ pub fn handle_set_merchant_terms(
     fee_free_until: i64,
 ) -> Result<()> {
     if let Some(bps) = fee_bps_override {
-        require!(bps <= MAX_BPS, RecurError::FeeTooHigh);
+        require!(bps <= MAX_FEE_BPS, RecurError::FeeTooHigh);
     }
     let merchant = &mut ctx.accounts.merchant;
     merchant.fee_bps_override = fee_bps_override;

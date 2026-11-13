@@ -1,6 +1,6 @@
 mod common;
 
-use recur::RecurError;
+use recur::{RecurError, MAX_FEE_BPS, MAX_MIN_FEE};
 use solana_signer::Signer;
 
 fn initialised() -> (common::Ctx, solana_pubkey::Pubkey) {
@@ -57,21 +57,43 @@ fn update_config_rejects_non_admin() {
     assert_eq!(common::fetch_config(&ctx).admin, ctx.admin.pubkey());
 }
 
-#[test]
-fn update_config_rejects_fee_over_100_percent() {
-    let (mut ctx, treasury) = initialised();
+fn update_fees(ctx: &mut common::Ctx, fee_bps: u16, min_fee: u64) -> common::TxResult {
     let admin = ctx.admin.insecure_clone();
-    let result = common::update_config(
-        &mut ctx,
+    let treasury = common::fetch_config(ctx).treasury;
+    common::update_config(
+        ctx,
         &admin,
         admin.pubkey(),
-        10_001,
-        0,
+        fee_bps,
+        min_fee,
         treasury,
         false,
         solana_pubkey::Pubkey::default(),
-    );
+    )
+}
+
+#[test]
+fn update_config_accepts_fees_at_the_caps() {
+    let (mut ctx, _) = initialised();
+    update_fees(&mut ctx, MAX_FEE_BPS, MAX_MIN_FEE).unwrap();
+    let cfg = common::fetch_config(&ctx);
+    assert_eq!((cfg.fee_bps, cfg.min_fee), (MAX_FEE_BPS, MAX_MIN_FEE));
+}
+
+#[test]
+fn update_config_rejects_fee_over_the_cap() {
+    let (mut ctx, _) = initialised();
+    let result = update_fees(&mut ctx, MAX_FEE_BPS + 1, 0);
     assert!(common::err_is(&result, RecurError::FeeTooHigh));
+    assert_eq!(common::fetch_config(&ctx).fee_bps, 200);
+}
+
+#[test]
+fn update_config_rejects_min_fee_over_the_cap() {
+    let (mut ctx, _) = initialised();
+    let result = update_fees(&mut ctx, 200, MAX_MIN_FEE + 1);
+    assert!(common::err_is(&result, RecurError::FeeTooHigh));
+    assert_eq!(common::fetch_config(&ctx).min_fee, 100_000);
 }
 
 #[test]
