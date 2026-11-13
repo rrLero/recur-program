@@ -56,3 +56,48 @@ fn init_config_rejects_non_upgrade_authority() {
     assert!(common::err_is(&result, RecurError::NotUpgradeAuthority));
     assert!(ctx.svm.get_account(&common::config_pda()).is_none());
 }
+
+#[test]
+fn handover_leaves_a_paused_config_owned_by_the_vault() {
+    let mut ctx = common::setup();
+    let deployer = ctx.admin.insecure_clone();
+    let mint = litesvm_token::CreateMint::new(&mut ctx.svm, &deployer)
+        .decimals(6)
+        .send()
+        .unwrap();
+    let vault = common::ix::squads_vault_pda(&common::new_address());
+    let agent_puller = common::new_address();
+    let ixs = common::ix::handover_ixs(&common::ix::Handover {
+        deployer: deployer.pubkey(),
+        vault,
+        mint,
+        agent_puller,
+        fee_bps: 200,
+        min_fee: 100_000,
+    });
+    common::send_many(&mut ctx, &ixs, &[&deployer]).unwrap();
+
+    let cfg = common::fetch_config(&ctx);
+    assert_eq!(
+        (cfg.admin, cfg.treasury, cfg.agent_puller, cfg.paused),
+        (vault, vault, agent_puller, true)
+    );
+    assert_eq!((cfg.fee_bps, cfg.min_fee), (200, 100_000));
+    let vault_ata = ctx
+        .svm
+        .get_account(&common::ix::ata_of(&mint, &vault))
+        .unwrap();
+    assert_eq!(vault_ata.owner, anchor_spl::token::ID);
+
+    let result = common::update_config(
+        &mut ctx,
+        &deployer,
+        deployer.pubkey(),
+        200,
+        100_000,
+        vault,
+        false,
+        agent_puller,
+    );
+    assert!(common::err_is(&result, RecurError::Unauthorized));
+}

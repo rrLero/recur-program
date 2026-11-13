@@ -6,7 +6,7 @@ use std::{env, fs, path::PathBuf};
 use anchor_lang::AccountDeserialize;
 use litesvm_token::spl_token;
 use recur::Config;
-use solana_instruction::{AccountMeta, Instruction};
+use solana_instruction::Instruction;
 use solana_keypair::{read_keypair_file, write_keypair_file, Keypair};
 use solana_program_pack::Pack;
 use solana_pubkey::Pubkey;
@@ -26,9 +26,6 @@ use subscriptions::{
 const RPC_URL: &str = "https://api.devnet.solana.com";
 const USDC: u64 = 1_000_000;
 const PLAN_ID: u64 = 1;
-const ASSOCIATED_TOKEN_PROGRAM: Pubkey =
-    Pubkey::from_str_const("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-
 type Res<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn state_dir() -> Res<PathBuf> {
@@ -51,24 +48,7 @@ fn rail_pda(seeds: &[&[u8]]) -> Pubkey {
     Pubkey::find_program_address(seeds, &SUBSCRIPTIONS_ID).0
 }
 
-fn ata_of(mint: &Pubkey, owner: &Pubkey) -> Pubkey {
-    anchor_spl::associated_token::get_associated_token_address(owner, mint)
-}
-
-fn create_ata_ix(payer: &Pubkey, owner: &Pubkey, mint: &Pubkey) -> Instruction {
-    Instruction {
-        program_id: ASSOCIATED_TOKEN_PROGRAM,
-        accounts: vec![
-            AccountMeta::new(*payer, true),
-            AccountMeta::new(ata_of(mint, owner), false),
-            AccountMeta::new_readonly(*owner, false),
-            AccountMeta::new_readonly(*mint, false),
-            AccountMeta::new_readonly(solana_sdk_ids::system_program::ID, false),
-            AccountMeta::new_readonly(spl_token::ID, false),
-        ],
-        data: vec![1],
-    }
-}
+use ix::{ata_of, create_ata_ix};
 
 fn send(rpc: &RpcClient, payer: &Keypair, ixs: &[Instruction], extra: &[&Keypair]) -> Res<String> {
     let mut signers: Vec<&Keypair> = vec![payer];

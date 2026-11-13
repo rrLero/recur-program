@@ -1,8 +1,63 @@
 #![allow(dead_code)]
 
 use anchor_lang::{InstructionData, ToAccountMetas};
-use solana_instruction::Instruction;
+use solana_instruction::{AccountMeta, Instruction};
 use solana_pubkey::Pubkey;
+
+pub const SQUADS_PROGRAM: Pubkey =
+    Pubkey::from_str_const("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf");
+
+pub fn squads_vault_pda(multisig: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(
+        &[b"multisig", multisig.as_ref(), b"vault", &[0]],
+        &SQUADS_PROGRAM,
+    )
+    .0
+}
+
+pub fn ata_of(mint: &Pubkey, owner: &Pubkey) -> Pubkey {
+    anchor_spl::associated_token::get_associated_token_address(owner, mint)
+}
+
+pub fn create_ata_ix(payer: &Pubkey, owner: &Pubkey, mint: &Pubkey) -> Instruction {
+    Instruction {
+        program_id: anchor_spl::associated_token::ID,
+        accounts: vec![
+            AccountMeta::new(*payer, true),
+            AccountMeta::new(ata_of(mint, owner), false),
+            AccountMeta::new_readonly(*owner, false),
+            AccountMeta::new_readonly(*mint, false),
+            AccountMeta::new_readonly(solana_sdk_ids::system_program::ID, false),
+            AccountMeta::new_readonly(anchor_spl::token::ID, false),
+        ],
+        data: vec![1],
+    }
+}
+
+pub struct Handover {
+    pub deployer: Pubkey,
+    pub vault: Pubkey,
+    pub mint: Pubkey,
+    pub agent_puller: Pubkey,
+    pub fee_bps: u16,
+    pub min_fee: u64,
+}
+
+pub fn handover_ixs(h: &Handover) -> [Instruction; 3] {
+    [
+        init_config_ix(h.deployer, h.fee_bps, h.min_fee, h.vault),
+        create_ata_ix(&h.deployer, &h.vault, &h.mint),
+        update_config_ix(
+            h.deployer,
+            h.vault,
+            h.fee_bps,
+            h.min_fee,
+            h.vault,
+            true,
+            h.agent_puller,
+        ),
+    ]
+}
 
 pub fn config_pda() -> Pubkey {
     Pubkey::find_program_address(&[recur::CONFIG_SEED], &recur::ID).0
