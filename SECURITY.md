@@ -13,7 +13,7 @@ Include the affected instruction or account, the steps to reproduce, and the imp
 
 ## Scope
 
-The program is on devnet and has not been audited yet; an audit comes before mainnet. Funds on devnet have no value, but we still want every report, because the same code goes to mainnet.
+The program is on devnet and has not been audited yet. Funds on devnet have no value, but we still want every report, because the same code goes to mainnet.
 
 Out of scope: the Subscriptions program it builds on (report those to the [Solana Foundation](https://github.com/solana-foundation/subscriptions)), and denial of service on public RPC.
 

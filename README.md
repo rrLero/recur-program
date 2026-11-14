@@ -9,7 +9,7 @@ It is built on the Solana Foundation [Subscriptions program](https://github.com/
 | Program id (devnet) | `bY4Yyya6CMHBUfU9BfgoWK8TCjVhWtxQPurtX56dF5v` |
 | Subscriptions program (the rail) | `De1egAFMkMWZSN5rYXRj9CAdheBamobVNubTsi9avR44` |
 | Framework | Anchor 1.2.1, Solana 4.3.2 (`Anchor.toml`), host Rust 1.97 (`rust-toolchain.toml`) |
-| Status | Devnet. Not audited yet; an audit comes before mainnet |
+| Status | Devnet. Not audited yet |
 
 ## Instructions
 
