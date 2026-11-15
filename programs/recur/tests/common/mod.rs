@@ -311,15 +311,15 @@ pub fn second_plan(ctx: &mut Ctx, sub: &Sub) -> Pubkey {
         price.period_hours,
         PlanAccess {
             pullers,
-            destinations: default_destinations(&merchant.pubkey()),
+            destinations: recurring_destinations(),
         },
     )
 }
 
-fn default_destinations(merchant: &Pubkey) -> [Pubkey; 4] {
+fn recurring_destinations() -> [Pubkey; 4] {
     [
-        *merchant,
         transit_pda(),
+        Pubkey::default(),
         Pubkey::default(),
         Pubkey::default(),
     ]
@@ -394,7 +394,12 @@ pub fn configured_upfront(price: u64, period_hours: u64) -> (Ctx, Sub) {
         period_hours,
         PlanAccess {
             pullers: [Pubkey::default(); 4],
-            destinations: default_destinations(&sub.merchant.pubkey()),
+            destinations: [
+                sub.merchant.pubkey(),
+                Pubkey::default(),
+                Pubkey::default(),
+                Pubkey::default(),
+            ],
         },
     );
     (ctx, sub)
@@ -539,7 +544,7 @@ fn configured(
             Pubkey::default(),
         ]
     } else {
-        default_destinations(&merchant.pubkey())
+        recurring_destinations()
     };
     let plan = create_rail_plan(
         &mut ctx,
@@ -628,34 +633,41 @@ pub fn agent_activation_ixs(ctx: &Ctx, sub: &Sub, agent_puller: &Keypair) -> Vec
         ixs.push(init_subscription_authority_ix(sub, None));
     }
     ixs.push(rail_subscribe_ix(ctx, sub));
-    ixs.push(
-        subscriptions::instructions::TransferSubscription {
-            subscription_pda: sub.subscription,
-            plan_pda: sub.plan,
-            subscription_authority: sub.subscription_authority,
-            delegator_ata: sub.member_ata,
-            receiver_ata: sub.transit_ata,
-            caller: agent_puller.pubkey(),
-            token_mint: sub.mint,
-            token_program: litesvm_token::spl_token::ID,
-            event_authority: Pubkey::find_program_address(
-                &[b"event_authority"],
-                &subscriptions::SUBSCRIPTIONS_ID,
-            )
-            .0,
-            self_program: subscriptions::SUBSCRIPTIONS_ID,
-        }
-        .instruction(
-            subscriptions::instructions::TransferSubscriptionInstructionArgs {
-                transfer_data: subscriptions::types::TransferData {
-                    amount: price,
-                    delegator: sub.member.pubkey(),
-                    mint: sub.mint,
-                },
-            },
-        ),
-    );
+    ixs.push(rail_pull_ix(
+        sub,
+        agent_puller.pubkey(),
+        sub.transit_ata,
+        price,
+    ));
     ixs
+}
+
+pub fn rail_pull_ix(sub: &Sub, caller: Pubkey, receiver_ata: Pubkey, amount: u64) -> Instruction {
+    subscriptions::instructions::TransferSubscription {
+        subscription_pda: sub.subscription,
+        plan_pda: sub.plan,
+        subscription_authority: sub.subscription_authority,
+        delegator_ata: sub.member_ata,
+        receiver_ata,
+        caller,
+        token_mint: sub.mint,
+        token_program: litesvm_token::spl_token::ID,
+        event_authority: Pubkey::find_program_address(
+            &[b"event_authority"],
+            &subscriptions::SUBSCRIPTIONS_ID,
+        )
+        .0,
+        self_program: subscriptions::SUBSCRIPTIONS_ID,
+    }
+    .instruction(
+        subscriptions::instructions::TransferSubscriptionInstructionArgs {
+            transfer_data: subscriptions::types::TransferData {
+                amount,
+                delegator: sub.member.pubkey(),
+                mint: sub.mint,
+            },
+        },
+    )
 }
 
 pub fn collect_accounts(sub: &Sub, referrer_ata: Option<Pubkey>) -> recur::accounts::Collect {

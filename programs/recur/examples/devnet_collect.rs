@@ -232,8 +232,8 @@ fn ensure_merchant_and_plan(rpc: &RpcClient, wallet: &Keypair, setup: &Setup) ->
                 },
                 end_ts: 0,
                 destinations: [
-                    merchant,
                     ix::transit_pda(),
+                    Pubkey::default(),
                     Pubkey::default(),
                     Pubkey::default(),
                 ],

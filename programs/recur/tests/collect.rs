@@ -275,7 +275,8 @@ fn collect_refuses_while_upfront_active() {
     common::pay_upfront(&mut ctx, &sub, None).unwrap();
     let paid_until = common::paid_until(&ctx, &sub);
     common::set_plan(&mut ctx, &sub, |plan| {
-        plan.data.pullers[0] = common::puller_pda()
+        plan.data.pullers[0] = common::puller_pda();
+        plan.data.destinations[1] = common::transit_pda();
     });
     sub.subscription = common::rail_subscription_pda(&sub.plan, &sub.member.pubkey());
     common::rail_subscribe(&mut ctx, &sub).unwrap();
@@ -462,4 +463,18 @@ fn rejects_the_merchant_transit_on_a_community_plan() {
     let result = collect_as(&mut ctx, accounts);
     assert!(common::err_is(&result, RecurError::Unauthorized));
     assert_untouched(&ctx, &sub, paid_until);
+}
+
+#[test]
+fn merchant_cannot_pull_a_period_past_the_fee() {
+    let (mut ctx, sub) = common::configured_sub(PRICE, 720);
+    common::subscribe(&mut ctx, &sub, None).unwrap();
+    common::warp(&mut ctx, PERIOD);
+    let merchant = sub.merchant.insecure_clone();
+    let ix = common::rail_pull_ix(&sub, merchant.pubkey(), sub.merchant_ata, PRICE);
+    let result = common::send(&mut ctx, ix, &[&merchant]);
+    assert!(common::anchor_err_is(&result, RAIL_RECEIVER_NOT_A_DESTINATION));
+    assert_eq!(common::balance(&ctx, sub.merchant_ata), 29_400_000);
+    common::collect(&mut ctx, &sub, None).unwrap();
+    assert_eq!(common::balance(&ctx, sub.treasury_ata), 2 * 600_000);
 }
